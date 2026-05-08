@@ -33,8 +33,14 @@ import {
   User,
   Settings,
   LogOut,
+  Play,
+  Pause,
+  RotateCcw,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const dataEntries = [
   {
@@ -43,6 +49,8 @@ const dataEntries = [
     source: "Twitter",
     location: "Woolwich Station",
     date: "08 Jan 2026, 14:10",
+    latitude: 51.4899,
+    longitude: 0.0698,
   },
   {
     description: "Police evacuation announced",
@@ -50,6 +58,8 @@ const dataEntries = [
     source: "Official Report",
     location: "Woolwich High St",
     date: "08 Jan 2026, 14:25",
+    latitude: 51.4908,
+    longitude: 0.0647,
   },
   {
     description: "Fire spreading to nearby buildings",
@@ -57,6 +67,8 @@ const dataEntries = [
     source: "News Outlet",
     location: "Woolwich Market",
     date: "08 Jan 2026, 15:00",
+    latitude: 51.4893,
+    longitude: 0.0632,
   },
   {
     description: "Multiple fire engines dispatched",
@@ -64,6 +76,8 @@ const dataEntries = [
     source: "Twitter",
     location: "Plumstead Rd",
     date: "08 Jan 2026, 15:12",
+    latitude: 51.4895,
+    longitude: 0.0755,
   },
   {
     description: "Residents advised to avoid area",
@@ -71,6 +85,8 @@ const dataEntries = [
     source: "Manual Entry",
     location: "Woolwich Common",
     date: "08 Jan 2026, 15:30",
+    latitude: 51.4784,
+    longitude: 0.0639,
   },
   {
     description: "Significant damage to residential buildings",
@@ -78,6 +94,8 @@ const dataEntries = [
     source: "Official Report",
     location: "Woolwich High St",
     date: "08 Jan 2026, 16:10",
+    latitude: 51.4908,
+    longitude: 0.0647,
   },
   {
     description: "Fire under control",
@@ -85,6 +103,8 @@ const dataEntries = [
     source: "News Outlet",
     location: "Woolwich Market",
     date: "08 Jan 2026, 16:45",
+    latitude: 51.4893,
+    longitude: 0.0632,
   },
 ];
 
@@ -105,6 +125,33 @@ function badgeStyle(category) {
   return "bg-slate-100 text-slate-600";
 }
 
+function markerColor(category) {
+  if (category === "Awareness") return "#2563eb";
+  if (category === "Response") return "#16a34a";
+  if (category === "Damage") return "#f97316";
+  return "#64748b";
+}
+
+function createMarkerIcon(category, isCurrentEvent) {
+  const size = isCurrentEvent ? 28 : 22;
+  const color = markerColor(category);
+
+  return L.divIcon({
+    className: "custom-incident-marker",
+    html: `<div style="
+      width:${size}px;
+      height:${size}px;
+      background:${color};
+      border:4px solid white;
+      border-radius:9999px;
+      box-shadow:0 10px 25px rgba(15,23,42,0.25);
+    "></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
 function sourceIcon(source) {
   if (source === "Twitter")
     return <MessageCircle size={18} className="text-blue-500" />;
@@ -122,6 +169,73 @@ function IncidentDetails() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+
+  // currentIndex controls which event is currently active in playback.
+  // The Timeline tab and Map tab both use this same index, so they stay connected.
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // isPlaying tells React whether the timeline should auto-move every second.
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // selectedCategory filters the events used by both Timeline playback and Map markers.
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+
+  // Convert the existing mock data into timeline events and sort them by date/time.
+  // This keeps the playback in the correct chronological order.
+  const sortedEvents = useMemo(() => {
+    return [...dataEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, []);
+
+  // Apply the category filter before playback.
+  const playbackEvents = useMemo(() => {
+    if (selectedCategory === "All Categories") return sortedEvents;
+    return sortedEvents.filter((event) => event.category === selectedCategory);
+  }, [selectedCategory, sortedEvents]);
+
+  // These are the events that should currently be visible.
+  // The Map tab uses this to show markers, and the Timeline tab uses it to show timeline cards.
+  const visibleEvents = playbackEvents.slice(0, currentIndex + 1);
+
+  // This effect is the playback engine.
+  // When Play is active, it increases currentIndex every 1 second.
+  useEffect(() => {
+    if (!isPlaying) return undefined;
+
+    const timer = setInterval(() => {
+      setCurrentIndex((previousIndex) => {
+        const lastIndex = playbackEvents.length - 1;
+
+        if (previousIndex >= lastIndex) {
+          setIsPlaying(false);
+          return previousIndex;
+        }
+
+        return previousIndex + 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, playbackEvents.length]);
+
+  // When the category changes, restart playback from the beginning.
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentIndex(0);
+  }, [selectedCategory]);
+
+  function handlePlay() {
+    if (playbackEvents.length === 0) return;
+    setIsPlaying(true);
+  }
+
+  function handlePause() {
+    setIsPlaying(false);
+  }
+
+  function handleReset() {
+    setIsPlaying(false);
+    setCurrentIndex(0);
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
@@ -423,8 +537,26 @@ function IncidentDetails() {
               </div>
 
               {activeTab === "Data" && <DataTab />}
-              {activeTab === "Map" && <MapTab />}
-              {activeTab === "Timeline" && <TimelineTab />}
+              {activeTab === "Map" && (
+                <MapTab
+                  visibleEvents={visibleEvents}
+                  currentEvent={playbackEvents[currentIndex]}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                />
+              )}
+              {activeTab === "Timeline" && (
+                <TimelineTab
+                  visibleEvents={visibleEvents}
+                  currentIndex={currentIndex}
+                  isPlaying={isPlaying}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onReset={handleReset}
+                />
+              )}
             </div>
 
             <aside className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5">
@@ -567,75 +699,252 @@ function DataTab() {
   );
 }
 
-function MapTab() {
+function ResetMapButton() {
+  const map = useMap();
+
+  function handleResetView() {
+    // This returns the map back to the original incident area in Woolwich.
+    // It is useful after the user zooms out, zooms in, or drags away from the incident location.
+    map.setView([51.4899, 0.0698], 14);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleResetView}
+      className="absolute top-4 right-4 z-[500] bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm font-semibold shadow-sm hover:bg-slate-50 transition"
+    >
+      Reset View
+    </button>
+  );
+}
+
+function FollowCurrentEvent({ currentEvent }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!currentEvent) return;
+
+    // Whenever the timeline moves to a new event, the map smoothly moves to that event location.
+    // This connects the timeline playback with the geographical movement on the map.
+    map.flyTo([currentEvent.latitude, currentEvent.longitude], 15, {
+      animate: true,
+      duration: 1.2,
+    });
+  }, [currentEvent, map]);
+
+  return null;
+}
+
+function MapTab({
+  visibleEvents,
+  currentEvent,
+  selectedCategory,
+  setSelectedCategory,
+}) {
+  const woolwichCenter = [51.4899, 0.0698];
+
   return (
     <div className="p-6">
-      <div className="flex justify-end mb-4">
-        <select className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none bg-white">
-          <option>Filter by Category</option>
+      <div className="flex justify-between items-center mb-4 gap-4">
+        <p className="text-sm text-slate-500">
+          Showing {visibleEvents.length} event marker
+          {visibleEvents.length === 1 ? "" : "s"} from timeline playback
+        </p>
+
+        <select
+          value={selectedCategory}
+          onChange={(event) => setSelectedCategory(event.target.value)}
+          className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none bg-white"
+        >
+          <option>All Categories</option>
           <option>Awareness</option>
           <option>Response</option>
           <option>Damage</option>
         </select>
       </div>
 
-      <div className="relative h-[520px] rounded-2xl border border-slate-200 bg-gradient-to-br from-blue-50 via-slate-100 to-white overflow-hidden">
-        <div className="absolute inset-0 opacity-40">
-          <div className="absolute top-20 left-10 w-full h-px bg-slate-300 rotate-12" />
-          <div className="absolute top-52 left-0 w-full h-px bg-slate-300 -rotate-6" />
-          <div className="absolute top-80 left-0 w-full h-px bg-slate-300 rotate-3" />
-          <div className="absolute left-40 top-0 h-full w-px bg-slate-300 rotate-12" />
-          <div className="absolute left-96 top-0 h-full w-px bg-slate-300 -rotate-12" />
-        </div>
-
-        {[
-          ["top-24 left-44", "bg-blue-600"],
-          ["top-52 left-80", "bg-green-600"],
-          ["top-72 left-56", "bg-orange-500"],
-          ["top-36 right-52", "bg-green-600"],
-          ["bottom-24 right-72", "bg-blue-600"],
-        ].map(([pos, color], index) => (
-          <div
-            key={index}
-            className={`absolute ${pos} h-5 w-5 rounded-full ${color} ring-4 ring-white shadow-lg`}
+      <div className="relative h-[520px] rounded-2xl border border-slate-200 overflow-hidden">
+        {/*
+          Real interactive map powered by React Leaflet and OpenStreetMap.
+          The markers come from visibleEvents, so they update automatically
+          when the timeline playback currentIndex changes.
+        */}
+        <MapContainer
+          center={woolwichCenter}
+          zoom={14}
+          scrollWheelZoom={true}
+          className="h-full w-full z-0"
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-        ))}
 
-        <div className="absolute top-40 left-[360px] bg-white rounded-2xl shadow-md border border-slate-100 p-4 w-72">
-          <h4 className="font-bold">Police evacuation announced</h4>
-          <p className="text-sm text-slate-500 mt-2">
-            Category:{" "}
-            <span className="text-green-600 font-semibold">Response</span>
-          </p>
-          <p className="text-sm text-slate-500 mt-1">Time: 14:25</p>
-        </div>
+          <ResetMapButton />
+
+          <FollowCurrentEvent currentEvent={currentEvent} />
+
+          {visibleEvents.map((event, index) => {
+            const isCurrentEvent =
+              currentEvent?.description === event.description;
+
+            return (
+              <Marker
+                key={`${event.description}-${index}`}
+                position={[event.latitude, event.longitude]}
+                icon={createMarkerIcon(event.category, isCurrentEvent)}
+              >
+                <Popup>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900">
+                      {event.description}
+                    </h4>
+                    <p>
+                      <strong>Category:</strong> {event.category}
+                    </p>
+                    <p>
+                      <strong>Location:</strong> {event.location}
+                    </p>
+                    <p>
+                      <strong>Time:</strong> {event.date.split(", ")[1]}
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MapContainer>
+
+        {visibleEvents.length === 0 && (
+          <div className="absolute inset-0 z-[500] flex items-center justify-center pointer-events-none">
+            <p className="bg-white border border-slate-100 shadow-sm rounded-xl px-5 py-3 text-slate-500">
+              Press Play in the Timeline tab to reveal event markers.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TimelineTab() {
+function TimelineTab({
+  visibleEvents,
+  currentIndex,
+  isPlaying,
+  selectedCategory,
+  setSelectedCategory,
+  onPlay,
+  onPause,
+  onReset,
+}) {
+  const currentEvent = visibleEvents[currentIndex];
+
   return (
     <div className="p-8">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+        <div>
+          <h3 className="text-xl font-bold">Timeline Playback</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Play the incident timeline to reveal events and map markers over
+            time.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={selectedCategory}
+            onChange={(event) => setSelectedCategory(event.target.value)}
+            className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none bg-white"
+          >
+            <option>All Categories</option>
+            <option>Awareness</option>
+            <option>Response</option>
+            <option>Damage</option>
+          </select>
+
+          <button
+            onClick={onPlay}
+            disabled={isPlaying}
+            className="bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play size={18} />
+            Play
+          </button>
+
+          <button
+            onClick={onPause}
+            disabled={!isPlaying}
+            className="border border-slate-200 text-slate-700 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Pause size={18} />
+            Pause
+          </button>
+
+          <button
+            onClick={onReset}
+            className="border border-slate-200 text-slate-700 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50"
+          >
+            <RotateCcw size={18} />
+            Reset
+          </button>
+        </div>
+      </div>
+
       <div className="relative border-l-2 border-blue-100 ml-6 space-y-8">
-        {timeline.map(([time, text, category]) => (
-          <div key={time} className="relative pl-8">
-            <div className="absolute -left-[11px] top-1 h-5 w-5 rounded-full bg-blue-600 ring-4 ring-blue-50" />
-            <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-blue-600">{time}</h4>
-                <span
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
-                    category,
-                  )}`}
-                >
-                  {category}
-                </span>
+        {/*
+          Only visibleEvents are rendered here.
+          This means the timeline grows step-by-step as currentIndex increases.
+        */}
+        {visibleEvents.map((event, index) => {
+          const isCurrentEvent =
+            currentEvent?.description === event.description;
+
+          return (
+            <div key={event.description} className="relative pl-8">
+              <div
+                className={`absolute -left-[11px] top-1 h-5 w-5 rounded-full ring-4 ${
+                  isCurrentEvent
+                    ? "bg-blue-600 ring-blue-100 animate-pulse"
+                    : "bg-slate-300 ring-slate-50"
+                }`}
+              />
+              <div
+                className={`bg-white border shadow-sm rounded-2xl p-5 transition ${
+                  isCurrentEvent
+                    ? "border-blue-200 ring-2 ring-blue-50"
+                    : "border-slate-100"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-blue-600">
+                    {event.date.split(", ")[1]}
+                  </h4>
+                  <span
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
+                      event.category,
+                    )}`}
+                  >
+                    {event.category}
+                  </span>
+                </div>
+                <p className="text-slate-700 mt-2">{event.description}</p>
+                <p className="text-sm text-slate-500 mt-2 flex items-center gap-2">
+                  <MapPin size={16} />
+                  {event.location}
+                </p>
               </div>
-              <p className="text-slate-700 mt-2">{text}</p>
+            </div>
+          );
+        })}
+
+        {visibleEvents.length === 0 && (
+          <div className="relative pl-8">
+            <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5 text-slate-500">
+              No events to display for this category.
             </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
