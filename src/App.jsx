@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import AppLayout from "./components/layout/AppLayout";
+
 import Dashboard from "./pages/Dashboard";
 import Incidents from "./pages/Incidents";
 import IncidentDetails from "./pages/IncidentDetails";
@@ -10,11 +12,13 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/incidents" element={<Incidents />} />
-        <Route path="/incidents/:id" element={<IncidentDetails />} />
-        <Route path="/categories" element={<Categories />} />
-        <Route path="/export" element={<Export />} />
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/incidents" element={<Incidents />} />
+          <Route path="/incidents/:id" element={<IncidentDetails />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/export" element={<Export />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

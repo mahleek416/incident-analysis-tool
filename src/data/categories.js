@@ -1,0 +1,61 @@
+import {
+  Info,
+  CheckCircle,
+  TriangleAlert,
+  RotateCcw,
+  MoreHorizontal,
+} from "lucide-react";
+
+export const categories = [
+  {
+    icon: Info,
+    name: "Awareness",
+    description: "Early public reports and observations",
+    colour: "Blue",
+    type: "Informational",
+    entries: "2,450",
+    date: "08 Jan 2026",
+    color: "blue",
+  },
+  {
+    icon: CheckCircle,
+    name: "Response",
+    description: "Emergency response actions and official updates",
+    colour: "Green",
+    type: "Operational",
+    entries: "1,980",
+    date: "08 Jan 2026",
+    color: "green",
+  },
+  {
+    icon: TriangleAlert,
+    name: "Damage",
+    description: "Reports describing physical or environmental damage",
+    colour: "Orange",
+    type: "Impact",
+    entries: "1,320",
+    date: "08 Jan 2026",
+    color: "orange",
+  },
+  {
+    icon: RotateCcw,
+    name: "Recovery",
+    description:
+      "Updates related to repairs, reopening, and recovery actions",
+    colour: "Purple",
+    type: "Recovery",
+    entries: "980",
+    date: "09 Jan 2026",
+    color: "purple",
+  },
+  {
+    icon: MoreHorizontal,
+    name: "Other",
+    description: "Entries that do not fit existing categories",
+    colour: "Red",
+    type: "General",
+    entries: "420",
+    date: "09 Jan 2026",
+    color: "red",
+  },
+];
