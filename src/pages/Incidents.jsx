@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ClipboardList,
@@ -16,9 +16,28 @@ import {
   Search,
   X,
   Save,
+  Flame,
+  Waves,
+  Sun,
+  Users,
+  Zap,
 } from "lucide-react";
 
 import { incidents as initialIncidents } from "../data/incidents";
+const iconMap = {
+  1: Flame,
+  2: Waves,
+  3: Sun,
+  4: Users,
+  5: Zap,
+};
+
+function restoreIncidentIcons(list) {
+  return list.map((incident) => ({
+    ...incident,
+    icon: iconMap[incident.id] || ClipboardList,
+  }));
+}
 
 function getStatusStyle(status) {
   if (status === "Active") return "bg-blue-50 text-blue-600";
@@ -39,7 +58,13 @@ function getCategoryStyle(color) {
 }
 
 function Incidents() {
-  const [incidentList, setIncidentList] = useState(initialIncidents);
+  const [incidentList, setIncidentList] = useState(() => {
+    const savedIncidents = localStorage.getItem("incidents");
+
+    return savedIncidents
+      ? restoreIncidentIcons(JSON.parse(savedIncidents))
+      : initialIncidents;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
@@ -55,6 +80,13 @@ function Incidents() {
     entries: "",
     color: "blue",
   });
+  useEffect(() => {
+    const incidentsToSave = incidentList.map(
+      ({ icon, ...incident }) => incident,
+    );
+
+    localStorage.setItem("incidents", JSON.stringify(incidentsToSave));
+  }, [incidentList]);
 
   const filteredIncidents = incidentList.filter((incident) => {
     const matchesSearch =

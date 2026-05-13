@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Database,
@@ -12,9 +13,31 @@ import {
   ChevronRight,
   Tags,
   Search,
+  X,
+  Save,
+  Info,
+  CheckCircle,
+  TriangleAlert,
+  RotateCcw,
+  MoreHorizontal,
 } from "lucide-react";
 
-import { categories } from "../data/categories";
+import { categories as initialCategories } from "../data/categories";
+
+const iconMap = {
+  Awareness: Info,
+  Response: CheckCircle,
+  Damage: TriangleAlert,
+  Recovery: RotateCcw,
+  Other: MoreHorizontal,
+};
+
+function restoreCategoryIcons(list) {
+  return list.map((category) => ({
+    ...category,
+    icon: iconMap[category.name] || Tags,
+  }));
+}
 
 function colorStyle(color) {
   const styles = {
@@ -25,7 +48,7 @@ function colorStyle(color) {
     red: "bg-red-50 text-red-600",
   };
 
-  return styles[color];
+  return styles[color] || "bg-slate-100 text-slate-600";
 }
 
 function dotStyle(color) {
@@ -37,10 +60,169 @@ function dotStyle(color) {
     Red: "bg-red-500",
   };
 
-  return styles[color];
+  return styles[color] || "bg-slate-400";
 }
 
 function Categories() {
+  const [categories, setCategories] = useState(() => {
+    const savedCategories = localStorage.getItem("categories");
+
+    return savedCategories
+      ? restoreCategoryIcons(JSON.parse(savedCategories))
+      : initialCategories;
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("All Category Types");
+  const [selectedUsage, setSelectedUsage] = useState("All Usage Levels");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showModal, setShowModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    colour: "Blue",
+    type: "Informational",
+    entries: "0",
+    date: "13 May 2026",
+    color: "blue",
+    icon: Tags,
+  });
+
+  const rowsPerPage = 5;
+
+  useEffect(() => {
+    const categoriesToSave = categories.map(
+      ({ icon, ...category }) => category,
+    );
+
+    localStorage.setItem("categories", JSON.stringify(categoriesToSave));
+  }, [categories]);
+
+  const filteredCategories = useMemo(() => {
+    return categories.filter((category) => {
+      const searchMatch =
+        category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        category.description
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        category.type.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const typeMatch =
+        selectedType === "All Category Types" || category.type === selectedType;
+
+      const entriesNumber = Number(String(category.entries).replace(/,/g, ""));
+
+      const usageMatch =
+        selectedUsage === "All Usage Levels" ||
+        (selectedUsage === "High Usage" && entriesNumber >= 1500) ||
+        (selectedUsage === "Medium Usage" &&
+          entriesNumber >= 800 &&
+          entriesNumber < 1500) ||
+        (selectedUsage === "Low Usage" && entriesNumber < 800);
+
+      return searchMatch && typeMatch && usageMatch;
+    });
+  }, [categories, searchQuery, selectedType, selectedUsage]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredCategories.length / rowsPerPage),
+  );
+
+  const paginatedCategories = filteredCategories.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage,
+  );
+
+  const totalEntries = categories.reduce(
+    (sum, category) => sum + Number(String(category.entries).replace(/,/g, "")),
+    0,
+  );
+
+  const mostUsedCategory = [...categories].sort(
+    (a, b) =>
+      Number(String(b.entries).replace(/,/g, "")) -
+      Number(String(a.entries).replace(/,/g, "")),
+  )[0];
+
+  function openCreateModal() {
+    setEditingCategory(null);
+
+    setFormData({
+      name: "",
+      description: "",
+      colour: "Blue",
+      type: "Informational",
+      entries: "0",
+      date: "13 May 2026",
+      color: "blue",
+      icon: Tags,
+    });
+
+    setShowModal(true);
+  }
+
+  function openEditModal(category) {
+    setEditingCategory(category.name);
+    setFormData(category);
+    setShowModal(true);
+  }
+
+  function handleColourChange(colour) {
+    const colourMap = {
+      Blue: "blue",
+      Green: "green",
+      Orange: "orange",
+      Purple: "purple",
+      Red: "red",
+    };
+
+    setFormData({
+      ...formData,
+      colour,
+      color: colourMap[colour],
+    });
+  }
+
+  function saveCategory() {
+    if (!formData.name.trim()) return;
+
+    const categoryToSave = {
+      ...formData,
+      icon: iconMap[formData.name] || Tags,
+    };
+
+    if (editingCategory) {
+      setCategories((currentCategories) =>
+        currentCategories.map((category) =>
+          category.name === editingCategory ? categoryToSave : category,
+        ),
+      );
+    } else {
+      setCategories((currentCategories) => [
+        ...currentCategories,
+        categoryToSave,
+      ]);
+    }
+
+    setShowModal(false);
+  }
+
+  function deleteCategory(categoryName) {
+    setCategories((currentCategories) =>
+      currentCategories.filter((category) => category.name !== categoryName),
+    );
+  }
+
+  function resetFilters() {
+    setSearchQuery("");
+    setSelectedType("All Category Types");
+    setSelectedUsage("All Usage Levels");
+    setCurrentPage(1);
+  }
+
   return (
     <section className="p-8">
       <div className="flex items-start justify-between mb-7">
@@ -52,7 +234,10 @@ function Categories() {
           </p>
         </div>
 
-        <button className="bg-blue-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 font-semibold shadow-sm hover:bg-blue-700 transition">
+        <button
+          onClick={openCreateModal}
+          className="bg-blue-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 font-semibold shadow-sm hover:bg-blue-700 transition"
+        >
           <Plus size={20} />
           Create Category
         </button>
@@ -62,21 +247,21 @@ function Categories() {
         {[
           {
             icon: Tags,
-            value: "24",
+            value: categories.length,
             label: "Total Categories",
             bg: "bg-blue-100",
             color: "text-blue-600",
           },
           {
             icon: Database,
-            value: "8,532",
+            value: totalEntries.toLocaleString(),
             label: "Total Categorised Entries",
             bg: "bg-green-100",
             color: "text-green-600",
           },
           {
             icon: TrendingUp,
-            value: "Response",
+            value: mostUsedCategory?.name || "None",
             label: "Most Used Category",
             bg: "bg-purple-100",
             color: "text-purple-600",
@@ -115,17 +300,44 @@ function Categories() {
             <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <Search size={20} className="text-slate-400" />
               <input
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setCurrentPage(1);
+                }}
                 className="outline-none w-full text-sm"
                 placeholder="Search categories..."
               />
             </div>
 
-            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none">
+            <select
+              value={selectedType}
+              onChange={(event) => {
+                setSelectedType(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+            >
               <option>All Category Types</option>
+              <option>Informational</option>
+              <option>Operational</option>
+              <option>Impact</option>
+              <option>Recovery</option>
+              <option>General</option>
             </select>
 
-            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none">
+            <select
+              value={selectedUsage}
+              onChange={(event) => {
+                setSelectedUsage(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+            >
               <option>All Usage Levels</option>
+              <option>High Usage</option>
+              <option>Medium Usage</option>
+              <option>Low Usage</option>
             </select>
           </div>
 
@@ -144,105 +356,138 @@ function Categories() {
               </thead>
 
               <tbody>
-                {categories.map((category) => (
-                  <tr
-                    key={category.name}
-                    className="border-t border-slate-100 hover:bg-slate-50 transition"
-                  >
-                    <td className="px-5 py-5">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`h-11 w-11 rounded-xl ${colorStyle(
-                            category.color,
-                          )} flex items-center justify-center`}
-                        >
-                          <category.icon size={22} />
+                {paginatedCategories.length > 0 ? (
+                  paginatedCategories.map((category) => (
+                    <tr
+                      key={category.name}
+                      className="border-t border-slate-100 hover:bg-slate-50 transition"
+                    >
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`h-11 w-11 rounded-xl ${colorStyle(
+                              category.color,
+                            )} flex items-center justify-center`}
+                          >
+                            <category.icon size={22} />
+                          </div>
+
+                          <span className="font-semibold">{category.name}</span>
                         </div>
+                      </td>
 
-                        <span className="font-semibold">{category.name}</span>
-                      </div>
-                    </td>
+                      <td className="px-5 py-5 text-slate-600 max-w-[260px]">
+                        {category.description}
+                      </td>
 
-                    <td className="px-5 py-5 text-slate-600 max-w-[260px]">
-                      {category.description}
-                    </td>
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <span
+                            className={`h-3 w-3 rounded-full ${dotStyle(
+                              category.colour,
+                            )}`}
+                          />
+                          {category.colour}
+                        </div>
+                      </td>
 
-                    <td className="px-5 py-5">
-                      <div className="flex items-center gap-2 text-slate-600">
+                      <td className="px-5 py-5">
                         <span
-                          className={`h-3 w-3 rounded-full ${dotStyle(
-                            category.colour,
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold ${colorStyle(
+                            category.color,
                           )}`}
-                        />
-                        {category.colour}
-                      </div>
-                    </td>
+                        >
+                          {category.type}
+                        </span>
+                      </td>
 
-                    <td className="px-5 py-5">
-                      <span
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold ${colorStyle(
-                          category.color,
-                        )}`}
-                      >
-                        {category.type}
-                      </span>
-                    </td>
+                      <td className="px-5 py-5 text-slate-700 font-medium">
+                        {category.entries}
+                      </td>
 
-                    <td className="px-5 py-5 text-slate-700 font-medium">
-                      {category.entries}
-                    </td>
+                      <td className="px-5 py-5 text-slate-500">
+                        {category.date}
+                      </td>
 
-                    <td className="px-5 py-5 text-slate-500">
-                      {category.date}
-                    </td>
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => openEditModal(category)}
+                            className="h-9 w-9 rounded-lg border border-blue-100 flex items-center justify-center text-blue-600 hover:bg-blue-50"
+                          >
+                            <Pencil size={17} />
+                          </button>
 
-                    <td className="px-5 py-5">
-                      <div className="flex items-center gap-3">
-                        <button className="h-9 w-9 rounded-lg border border-blue-100 flex items-center justify-center text-blue-600 hover:bg-blue-50">
-                          <Pencil size={17} />
-                        </button>
-
-                        <button className="h-9 w-9 rounded-lg border border-red-100 flex items-center justify-center text-red-500 hover:bg-red-50">
-                          <Trash2 size={17} />
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => deleteCategory(category.name)}
+                            className="h-9 w-9 rounded-lg border border-red-100 flex items-center justify-center text-red-500 hover:bg-red-50"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="7"
+                      className="px-5 py-8 text-center text-slate-500"
+                    >
+                      No categories match your filters.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
 
             <div className="flex items-center justify-between px-5 py-5 border-t border-slate-100">
-              <p className="text-sm text-slate-500">
-                Showing 1 to 5 of 24 categories
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-slate-500">
+                  Showing {paginatedCategories.length} of{" "}
+                  {filteredCategories.length} categories
+                </p>
+
+                <button
+                  onClick={resetFilters}
+                  className="text-sm text-blue-600 font-semibold hover:underline"
+                >
+                  Reset Filters
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
-                <button className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400">
+                <button
+                  onClick={() =>
+                    setCurrentPage((page) => Math.max(1, page - 1))
+                  }
+                  disabled={currentPage === 1}
+                  className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40"
+                >
                   <ChevronLeft size={18} />
                 </button>
 
-                <button className="h-9 w-9 rounded-lg bg-blue-600 text-white">
-                  1
-                </button>
+                {Array.from({ length: totalPages }).map((_, index) => (
+                  <button
+                    key={index + 1}
+                    onClick={() => setCurrentPage(index + 1)}
+                    className={`h-9 w-9 rounded-lg ${
+                      currentPage === index + 1
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-50 text-slate-600"
+                    }`}
+                  >
+                    {index + 1}
+                  </button>
+                ))}
 
-                <button className="h-9 w-9 rounded-lg bg-slate-50 text-slate-600">
-                  2
-                </button>
-
-                <button className="h-9 w-9 rounded-lg bg-slate-50 text-slate-600">
-                  3
-                </button>
-
-                <button className="h-9 w-9 rounded-lg bg-slate-50 text-slate-600">
-                  4
-                </button>
-
-                <button className="h-9 w-9 rounded-lg bg-slate-50 text-slate-600">
-                  5
-                </button>
-
-                <button className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500">
+                <button
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(totalPages, page + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40"
+                >
                   <ChevronRight size={18} />
                 </button>
               </div>
@@ -262,8 +507,8 @@ function Categories() {
               bg="bg-blue-100"
               color="text-blue-600"
               title="Most Used Category"
-              main="Awareness"
-              sub="2,450 entries (28.7%)"
+              main={mostUsedCategory?.name || "None"}
+              sub={`${mostUsedCategory?.entries || 0} entries`}
             />
 
             <InsightCard
@@ -289,8 +534,8 @@ function Categories() {
               bg="bg-purple-100"
               color="text-purple-600"
               title="Categories Used This Month"
-              main="12"
-              sub="Out of 24 total"
+              main={Math.min(categories.length, 12)}
+              sub={`Out of ${categories.length} total`}
             />
 
             <button className="w-full mt-4 bg-blue-50 text-blue-600 rounded-xl py-4 font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 transition">
@@ -300,7 +545,142 @@ function Categories() {
           </div>
         </aside>
       </div>
+
+      {showModal && (
+        <CategoryModal
+          formData={formData}
+          setFormData={setFormData}
+          onClose={() => setShowModal(false)}
+          onSave={saveCategory}
+          onColourChange={handleColourChange}
+          editingCategory={editingCategory}
+        />
+      )}
     </section>
+  );
+}
+
+function CategoryModal({
+  formData,
+  setFormData,
+  onClose,
+  onSave,
+  onColourChange,
+  editingCategory,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-2xl p-7">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold">
+            {editingCategory ? "Edit Category" : "Create Category"}
+          </h2>
+
+          <button
+            onClick={onClose}
+            className="h-10 w-10 rounded-xl hover:bg-slate-100 flex items-center justify-center"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          <FormInput
+            label="Category Name"
+            value={formData.name}
+            onChange={(event) =>
+              setFormData({ ...formData, name: event.target.value })
+            }
+            placeholder="e.g. Awareness"
+          />
+
+          <FormInput
+            label="Description"
+            value={formData.description}
+            onChange={(event) =>
+              setFormData({ ...formData, description: event.target.value })
+            }
+            placeholder="Brief category description"
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormSelect
+              label="Colour"
+              value={formData.colour}
+              onChange={(event) => onColourChange(event.target.value)}
+              options={["Blue", "Green", "Orange", "Purple", "Red"]}
+            />
+
+            <FormSelect
+              label="Type"
+              value={formData.type}
+              onChange={(event) =>
+                setFormData({ ...formData, type: event.target.value })
+              }
+              options={[
+                "Informational",
+                "Operational",
+                "Impact",
+                "Recovery",
+                "General",
+              ]}
+            />
+
+            <FormInput
+              label="Entries"
+              value={formData.entries}
+              onChange={(event) =>
+                setFormData({ ...formData, entries: event.target.value })
+              }
+              placeholder="0"
+            />
+          </div>
+
+          <button
+            onClick={onSave}
+            className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-blue-700"
+          >
+            <Save size={18} />
+            Save Category
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormInput({ label, ...props }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-2">
+        {label}
+      </label>
+
+      <input
+        {...props}
+        className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500"
+      />
+    </div>
+  );
+}
+
+function FormSelect({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-2">
+        {label}
+      </label>
+
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500"
+      >
+        {options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 

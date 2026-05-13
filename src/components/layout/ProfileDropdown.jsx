@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import { User, Settings, Bell, LogOut } from "lucide-react";
 
 function ProfileDropdown() {
@@ -15,27 +17,39 @@ function ProfileDropdown() {
       </div>
 
       <div className="py-3 space-y-1">
-        <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition">
+        <Link
+          to="/profile"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition"
+        >
           <User size={20} />
           My Profile
-        </button>
+        </Link>
 
-        <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition">
+        <Link
+          to="/settings"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition"
+        >
           <Settings size={20} />
           Account Settings
-        </button>
+        </Link>
 
-        <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition">
+        <Link
+          to="/notifications"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-slate-700 hover:bg-slate-50 transition"
+        >
           <Bell size={20} />
           Notifications
-        </button>
+        </Link>
       </div>
 
       <div className="pt-3 border-t border-slate-100">
-        <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 transition font-semibold">
+        <Link
+          to="/logout"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 transition font-semibold"
+        >
           <LogOut size={20} />
           Logout
-        </button>
+        </Link>
       </div>
     </div>
   );

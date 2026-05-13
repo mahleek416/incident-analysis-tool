@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { incidents as initialIncidents } from "../data/incidents";
+import { dataEntries } from "../data/dataEntries";
+
 import {
   ClipboardList,
   Database,
@@ -24,90 +27,6 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-
-const allLineData = {
-  "All Incidents": [
-    { month: "Dec", entries: 620 },
-    { month: "Jan", entries: 810 },
-    { month: "Feb", entries: 680 },
-    { month: "Mar", entries: 910 },
-    { month: "Apr", entries: 1100 },
-    { month: "May", entries: 950 },
-  ],
-  "London Fire": [
-    { month: "Dec", entries: 120 },
-    { month: "Jan", entries: 342 },
-    { month: "Feb", entries: 210 },
-    { month: "Mar", entries: 300 },
-    { month: "Apr", entries: 410 },
-    { month: "May", entries: 380 },
-  ],
-  "Flood Event": [
-    { month: "Dec", entries: 80 },
-    { month: "Jan", entries: 218 },
-    { month: "Feb", entries: 260 },
-    { month: "Mar", entries: 190 },
-    { month: "Apr", entries: 240 },
-    { month: "May", entries: 310 },
-  ],
-  "Heatwave 2024": [
-    { month: "Dec", entries: 240 },
-    { month: "Jan", entries: 300 },
-    { month: "Feb", entries: 420 },
-    { month: "Mar", entries: 600 },
-    { month: "Apr", entries: 780 },
-    { month: "May", entries: 905 },
-  ],
-};
-
-const barDataByCategory = {
-  "All Categories": [
-    { name: "Awareness", value: 2450 },
-    { name: "Response", value: 1980 },
-    { name: "Damage", value: 1320 },
-    { name: "Recovery", value: 980 },
-    { name: "Other", value: 420 },
-  ],
-  Awareness: [{ name: "Awareness", value: 2450 }],
-  Response: [{ name: "Response", value: 1980 }],
-  Damage: [{ name: "Damage", value: 1320 }],
-  Recovery: [{ name: "Recovery", value: 980 }],
-};
-
-const stats = [
-  {
-    label: "Total Incidents",
-    value: "1,248",
-    icon: ClipboardList,
-    bg: "bg-blue-100",
-    color: "text-blue-600",
-    change: "↗ 12.5%",
-  },
-  {
-    label: "Total Data Entries",
-    value: "8,532",
-    icon: Database,
-    bg: "bg-green-100",
-    color: "text-green-600",
-    change: "↗ 18.3%",
-  },
-  {
-    label: "Total Categories",
-    value: "24",
-    icon: Tags,
-    bg: "bg-purple-100",
-    color: "text-purple-600",
-    change: "↗ 9.1%",
-  },
-  {
-    label: "Active Incidents",
-    value: "156",
-    icon: AlertTriangle,
-    bg: "bg-orange-100",
-    color: "text-orange-600",
-    change: "↘ 4.7%",
-  },
-];
 
 const activities = [
   {
@@ -139,6 +58,11 @@ const activities = [
 function Dashboard() {
   const navigate = useNavigate();
 
+  const [incidentList, setIncidentList] = useState(() => {
+    const savedIncidents = localStorage.getItem("incidents");
+    return savedIncidents ? JSON.parse(savedIncidents) : initialIncidents;
+  });
+
   const [selectedIncident, setSelectedIncident] = useState("All Incidents");
   const [selectedRange, setSelectedRange] = useState("Last 6 Months");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
@@ -146,9 +70,138 @@ function Dashboard() {
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showCreateIncidentModal, setShowCreateIncidentModal] = useState(false);
   const [showAddDataModal, setShowAddDataModal] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState("1");
 
-  const currentLineData = allLineData[selectedIncident];
-  const currentBarData = barDataByCategory[selectedCategory];
+  const [newIncident, setNewIncident] = useState({
+    name: "",
+    location: "",
+    category: "",
+    date: "",
+    status: "Active",
+    entries: "",
+    color: "blue",
+  });
+
+  useEffect(() => {
+    const plainIncidents = incidentList.map(
+      ({ icon, ...incident }) => incident,
+    );
+    localStorage.setItem("incidents", JSON.stringify(plainIncidents));
+  }, [incidentList]);
+
+  const totalIncidents = incidentList.length;
+  const totalEntries = incidentList.reduce(
+    (sum, incident) => sum + Number(incident.entries || 0),
+    0,
+  );
+  const activeIncidents = incidentList.filter(
+    (incident) => incident.status === "Active",
+  ).length;
+  const totalCategories = new Set(
+    incidentList.map((incident) => incident.category),
+  ).size;
+
+  const stats = [
+    {
+      label: "Total Incidents",
+      value: totalIncidents,
+      icon: ClipboardList,
+      bg: "bg-blue-100",
+      color: "text-blue-600",
+      change: "Live",
+    },
+    {
+      label: "Total Data Entries",
+      value: totalEntries,
+      icon: Database,
+      bg: "bg-green-100",
+      color: "text-green-600",
+      change: "Live",
+    },
+    {
+      label: "Total Categories",
+      value: totalCategories,
+      icon: Tags,
+      bg: "bg-purple-100",
+      color: "text-purple-600",
+      change: "Live",
+    },
+    {
+      label: "Active Incidents",
+      value: activeIncidents,
+      icon: AlertTriangle,
+      bg: "bg-orange-100",
+      color: "text-orange-600",
+      change: "Live",
+    },
+  ];
+
+  const lineData = useMemo(() => {
+    const months = ["Dec", "Jan", "Feb", "Mar", "Apr", "May"];
+
+    if (selectedIncident === "All Incidents") {
+      return months.map((month, index) => ({
+        month,
+        entries: Math.round(totalEntries * (0.45 + index * 0.1)),
+      }));
+    }
+
+    const incident = incidentList.find(
+      (item) => item.name === selectedIncident,
+    );
+    const entries = Number(incident?.entries || 0);
+
+    return months.map((month, index) => ({
+      month,
+      entries: Math.round(entries * (0.35 + index * 0.12)),
+    }));
+  }, [selectedIncident, incidentList, totalEntries]);
+
+  const barData = useMemo(() => {
+    const categoryCounts = {};
+
+    dataEntries.forEach((entry) => {
+      categoryCounts[entry.category] =
+        (categoryCounts[entry.category] || 0) + 1;
+    });
+
+    if (selectedCategory !== "All Categories") {
+      return [
+        {
+          name: selectedCategory,
+          value: categoryCounts[selectedCategory] || 0,
+        },
+      ];
+    }
+
+    return Object.entries(categoryCounts).map(([name, value]) => ({
+      name,
+      value,
+    }));
+  }, [selectedCategory]);
+
+  function handleCreateIncident(event) {
+    event.preventDefault();
+
+    const incidentToAdd = {
+      id: Date.now(),
+      ...newIncident,
+      entries: Number(newIncident.entries || 0),
+    };
+
+    setIncidentList((current) => [...current, incidentToAdd]);
+    setShowCreateIncidentModal(false);
+
+    setNewIncident({
+      name: "",
+      location: "",
+      category: "",
+      date: "",
+      status: "Active",
+      entries: "",
+      color: "blue",
+    });
+  }
 
   return (
     <>
@@ -176,7 +229,7 @@ function Dashboard() {
                 <span className={`${item.color} font-semibold`}>
                   {item.change}
                 </span>
-                <span className="text-slate-500">vs last month</span>
+                <span className="text-slate-500">from current data</span>
               </div>
             </div>
           ))}
@@ -193,9 +246,9 @@ function Dashboard() {
             className="bg-white border border-slate-200 rounded-xl px-5 py-3 text-sm min-w-[230px] outline-none"
           >
             <option>All Incidents</option>
-            <option>London Fire</option>
-            <option>Flood Event</option>
-            <option>Heatwave 2024</option>
+            {incidentList.map((incident) => (
+              <option key={incident.id}>{incident.name}</option>
+            ))}
           </select>
         </div>
 
@@ -219,7 +272,7 @@ function Dashboard() {
 
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={currentLineData}>
+                <LineChart data={lineData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="month" />
                   <YAxis />
@@ -258,15 +311,16 @@ function Dashboard() {
                 <option>Response</option>
                 <option>Damage</option>
                 <option>Recovery</option>
+                <option>Other</option>
               </select>
             </div>
 
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={currentBarData}>
+                <BarChart data={barData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" />
-                  <YAxis />
+                  <YAxis allowDecimals={false} />
                   <Tooltip />
                   <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -340,17 +394,59 @@ function Dashboard() {
           title="Create Incident"
           onClose={() => setShowCreateIncidentModal(false)}
         >
-          <FormInput
-            label="Incident Name"
-            placeholder="e.g. London Fire Incident"
-          />
-          <FormInput label="Location" placeholder="e.g. Woolwich, London" />
-          <FormInput label="Category" placeholder="e.g. Fire Emergency" />
+          <form onSubmit={handleCreateIncident} className="space-y-5">
+            <FormInput
+              label="Incident Name"
+              value={newIncident.name}
+              onChange={(e) =>
+                setNewIncident({ ...newIncident, name: e.target.value })
+              }
+              required
+            />
 
-          <button className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2">
-            <Save size={18} />
-            Save Incident
-          </button>
+            <FormInput
+              label="Location"
+              value={newIncident.location}
+              onChange={(e) =>
+                setNewIncident({ ...newIncident, location: e.target.value })
+              }
+              required
+            />
+
+            <FormInput
+              label="Category"
+              value={newIncident.category}
+              onChange={(e) =>
+                setNewIncident({ ...newIncident, category: e.target.value })
+              }
+              required
+            />
+
+            <FormInput
+              label="Date Reported"
+              placeholder="e.g. 08 Jan 2026"
+              value={newIncident.date}
+              onChange={(e) =>
+                setNewIncident({ ...newIncident, date: e.target.value })
+              }
+              required
+            />
+
+            <FormInput
+              label="Data Entries"
+              type="number"
+              value={newIncident.entries}
+              onChange={(e) =>
+                setNewIncident({ ...newIncident, entries: e.target.value })
+              }
+              required
+            />
+
+            <button className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2">
+              <Save size={18} />
+              Save Incident
+            </button>
+          </form>
         </Modal>
       )}
 
@@ -359,15 +455,40 @@ function Dashboard() {
           title="Add Data Entry"
           onClose={() => setShowAddDataModal(false)}
         >
-          <FormInput label="Incident" value="London Fire Incident" readOnly />
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Select Incident
+            </label>
+
+            <select
+              value={selectedIncidentId}
+              onChange={(e) => setSelectedIncidentId(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500"
+            >
+              {incidentList.map((incident) => (
+                <option key={incident.id} value={incident.id}>
+                  {incident.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <FormTextarea
             label="Description"
             placeholder="Enter incident-related post, report, or observation..."
           />
+
           <FormInput label="Source" placeholder="e.g. Twitter, News Outlet" />
+
           <FormInput label="Location" placeholder="e.g. Woolwich Station" />
 
-          <button className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2">
+          <button
+            onClick={() => {
+              setShowAddDataModal(false);
+              navigate(`/incidents/${selectedIncidentId}`);
+            }}
+            className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-blue-700"
+          >
             <Save size={18} />
             Save Data Entry
           </button>
@@ -393,6 +514,7 @@ function ActivityList({ items }) {
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold text-sm">{item.title}</h4>
+
                 <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
                   {item.tag}
                 </span>
@@ -450,7 +572,7 @@ function Modal({ title, children, onClose }) {
           </button>
         </div>
 
-        <div className="space-y-5">{children}</div>
+        <div>{children}</div>
       </div>
     </div>
   );

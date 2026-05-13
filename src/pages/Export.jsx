@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   Database,
   ClipboardCheck,
@@ -41,6 +42,86 @@ function sourceIcon(source) {
 }
 
 function Export() {
+  const [selectedIncident, setSelectedIncident] = useState(
+    "London Fire Incident",
+  );
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedSource, setSelectedSource] = useState("All Sources");
+  const [selectedDateRange, setSelectedDateRange] = useState("Last 30 Days");
+  const [selectedFormat, setSelectedFormat] = useState("CSV");
+  const [selectedOptions, setSelectedOptions] = useState(exportOptions);
+
+  const filteredRows = useMemo(() => {
+    return previewRows.filter((row) => {
+      const categoryMatch =
+        selectedCategory === "All Categories" ||
+        row.category === selectedCategory;
+
+      const sourceMatch =
+        selectedSource === "All Sources" || row.source === selectedSource;
+
+      return categoryMatch && sourceMatch;
+    });
+  }, [selectedCategory, selectedSource]);
+
+  const selectedRecords = filteredRows.length;
+
+  function toggleOption(option) {
+    setSelectedOptions((currentOptions) =>
+      currentOptions.includes(option)
+        ? currentOptions.filter((item) => item !== option)
+        : [...currentOptions, option],
+    );
+  }
+
+  function resetFilters() {
+    setSelectedIncident("London Fire Incident");
+    setSelectedCategory("All Categories");
+    setSelectedSource("All Sources");
+    setSelectedDateRange("Last 30 Days");
+    setSelectedFormat("CSV");
+    setSelectedOptions(exportOptions);
+  }
+
+  function downloadFile() {
+    let content = "";
+    let mimeType = "text/plain";
+    let fileExtension = selectedFormat.toLowerCase();
+
+    if (selectedFormat === "JSON") {
+      content = JSON.stringify(filteredRows, null, 2);
+      mimeType = "application/json";
+    } else {
+      const headers = [
+        "Description",
+        "Category",
+        "Source",
+        "Location",
+        "Date & Time",
+      ];
+
+      const csvRows = filteredRows.map((row) =>
+        [row.description, row.category, row.source, row.location, row.date]
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(","),
+      );
+
+      content = [headers.join(","), ...csvRows].join("\n");
+      mimeType = "text/csv";
+      fileExtension = selectedFormat === "Excel" ? "csv" : "csv";
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `incident-export.${fileExtension}`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="p-8">
       <div className="flex items-start justify-between mb-7">
@@ -53,9 +134,12 @@ function Export() {
           </p>
         </div>
 
-        <button className="bg-blue-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 font-semibold shadow-sm hover:bg-blue-700 transition">
+        <button
+          onClick={downloadFile}
+          className="bg-blue-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 font-semibold shadow-sm hover:bg-blue-700 transition"
+        >
           <Download size={20} />
-          Export CSV
+          Export {selectedFormat}
         </button>
       </div>
 
@@ -67,6 +151,9 @@ function Export() {
             Tags,
             CalendarDays,
           }[card.icon];
+
+          const value =
+            card.label === "Selected Records" ? selectedRecords : card.value;
 
           return (
             <div
@@ -81,7 +168,7 @@ function Export() {
 
               <div>
                 <h3 className={`text-3xl font-extrabold ${card.color}`}>
-                  {card.value}
+                  {value}
                 </h3>
 
                 <p className="text-slate-500 mt-1">{card.label}</p>
@@ -101,26 +188,50 @@ function Export() {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
               <Field label="Select Incident">
-                <select className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none">
+                <select
+                  value={selectedIncident}
+                  onChange={(event) => setSelectedIncident(event.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                >
                   <option>London Fire Incident</option>
                 </select>
               </Field>
 
               <Field label="Select Category">
-                <select className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none">
+                <select
+                  value={selectedCategory}
+                  onChange={(event) => setSelectedCategory(event.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                >
                   <option>All Categories</option>
+                  <option>Awareness</option>
+                  <option>Response</option>
+                  <option>Damage</option>
                 </select>
               </Field>
 
               <Field label="Source">
-                <select className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none">
+                <select
+                  value={selectedSource}
+                  onChange={(event) => setSelectedSource(event.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                >
                   <option>All Sources</option>
+                  <option>Twitter</option>
+                  <option>Official Report</option>
+                  <option>News Outlet</option>
                 </select>
               </Field>
 
               <Field label="Date Range">
-                <select className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none">
+                <select
+                  value={selectedDateRange}
+                  onChange={(event) => setSelectedDateRange(event.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                >
                   <option>Last 30 Days</option>
+                  <option>Last 7 Days</option>
+                  <option>Today</option>
                 </select>
               </Field>
             </div>
@@ -131,25 +242,52 @@ function Export() {
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormatOption active icon={FileText} label="CSV" />
-                <FormatOption icon={FileJson} label="JSON" />
-                <FormatOption icon={FileSpreadsheet} label="Excel" />
+                <FormatOption
+                  active={selectedFormat === "CSV"}
+                  icon={FileText}
+                  label="CSV"
+                  onClick={() => setSelectedFormat("CSV")}
+                />
+                <FormatOption
+                  active={selectedFormat === "JSON"}
+                  icon={FileJson}
+                  label="JSON"
+                  onClick={() => setSelectedFormat("JSON")}
+                />
+                <FormatOption
+                  active={selectedFormat === "Excel"}
+                  icon={FileSpreadsheet}
+                  label="Excel"
+                  onClick={() => setSelectedFormat("Excel")}
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              {exportOptions.map((item) => (
-                <label
-                  key={item}
-                  className="flex items-center gap-3 text-sm text-slate-700"
-                >
-                  <span className="h-5 w-5 rounded bg-blue-600 text-white flex items-center justify-center">
-                    <CheckSquare size={15} />
-                  </span>
+              {exportOptions.map((item) => {
+                const checked = selectedOptions.includes(item);
 
-                  {item}
-                </label>
-              ))}
+                return (
+                  <button
+                    type="button"
+                    key={item}
+                    onClick={() => toggleOption(item)}
+                    className="flex items-center gap-3 text-sm text-slate-700 text-left"
+                  >
+                    <span
+                      className={`h-5 w-5 rounded flex items-center justify-center ${
+                        checked
+                          ? "bg-blue-600 text-white"
+                          : "border border-slate-300 text-transparent"
+                      }`}
+                    >
+                      <CheckSquare size={15} />
+                    </span>
+
+                    {item}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -162,12 +300,12 @@ function Export() {
                 </h3>
 
                 <p className="text-sm text-slate-500 mt-1">
-                  Preview of the first 4 records from your export
+                  Preview of the records from your export
                 </p>
               </div>
 
               <span className="bg-blue-50 text-slate-600 px-4 py-2 rounded-full text-sm">
-                Showing 4 of 342 records
+                Showing {filteredRows.length} of 342 records
               </span>
             </div>
 
@@ -184,39 +322,50 @@ function Export() {
                 </thead>
 
                 <tbody>
-                  {previewRows.map((row) => (
-                    <tr
-                      key={row.description}
-                      className="border-t border-slate-100 hover:bg-slate-50"
-                    >
-                      <td className="px-5 py-4 font-medium">
-                        {row.description}
-                      </td>
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row) => (
+                      <tr
+                        key={row.description}
+                        className="border-t border-slate-100 hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4 font-medium">
+                          {row.description}
+                        </td>
 
-                      <td className="px-5 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
-                            row.category,
-                          )}`}
-                        >
-                          {row.category}
-                        </span>
-                      </td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
+                              row.category,
+                            )}`}
+                          >
+                            {row.category}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-4 text-slate-600">
-                        <div className="flex items-center gap-2">
-                          {sourceIcon(row.source)}
-                          {row.source}
-                        </div>
-                      </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          <div className="flex items-center gap-2">
+                            {sourceIcon(row.source)}
+                            {row.source}
+                          </div>
+                        </td>
 
-                      <td className="px-5 py-4 text-slate-600">
-                        {row.location}
-                      </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          {row.location}
+                        </td>
 
-                      <td className="px-5 py-4 text-slate-600">{row.date}</td>
+                        <td className="px-5 py-4 text-slate-600">{row.date}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="5"
+                        className="px-5 py-8 text-center text-slate-500"
+                      >
+                        No records match the selected filters.
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -235,7 +384,7 @@ function Export() {
               bg="bg-blue-100"
               color="text-blue-600"
               title="Selected Incident"
-              main="London Fire Incident"
+              main={selectedIncident}
             />
 
             <SummaryCard
@@ -243,17 +392,29 @@ function Export() {
               bg="bg-green-100"
               color="text-green-600"
               title="Selected Records"
-              main="342"
+              main={selectedRecords}
               sub="out of 8,532 total"
             />
 
             <SummaryCard
-              icon={FileText}
+              icon={
+                selectedFormat === "JSON"
+                  ? FileJson
+                  : selectedFormat === "Excel"
+                    ? FileSpreadsheet
+                    : FileText
+              }
               bg="bg-purple-100"
               color="text-purple-600"
               title="File Format"
-              main="CSV"
-              sub="Comma Separated Values"
+              main={selectedFormat}
+              sub={
+                selectedFormat === "JSON"
+                  ? "JavaScript Object Notation"
+                  : selectedFormat === "Excel"
+                    ? "Spreadsheet compatible CSV"
+                    : "Comma Separated Values"
+              }
             />
 
             <SummaryCard
@@ -261,7 +422,7 @@ function Export() {
               bg="bg-red-100"
               color="text-red-600"
               title="Estimated File Size"
-              main="128 KB"
+              main={`${Math.max(1, selectedRecords * 32)} KB`}
               sub="Approximate size"
             />
 
@@ -270,16 +431,27 @@ function Export() {
               bg="bg-green-100"
               color="text-green-600"
               title="Ready to Export"
-              main="Yes"
-              sub="All systems ready"
+              main={selectedRecords > 0 ? "Yes" : "No"}
+              sub={
+                selectedRecords > 0
+                  ? "All systems ready"
+                  : "No matching records"
+              }
             />
 
-            <button className="w-full bg-blue-600 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 transition">
+            <button
+              onClick={downloadFile}
+              disabled={selectedRecords === 0}
+              className="w-full bg-blue-600 text-white rounded-xl py-4 font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Download size={18} />
-              Export CSV
+              Export {selectedFormat}
             </button>
 
-            <button className="w-full border border-slate-200 text-slate-700 rounded-xl py-4 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 transition">
+            <button
+              onClick={resetFilters}
+              className="w-full border border-slate-200 text-slate-700 rounded-xl py-4 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 transition"
+            >
               <RefreshCcw size={18} />
               Reset Filters
             </button>
@@ -309,9 +481,11 @@ function Field({ label, children }) {
   );
 }
 
-function FormatOption({ icon: Icon, label, active }) {
+function FormatOption({ icon: Icon, label, active, onClick }) {
   return (
     <button
+      type="button"
+      onClick={onClick}
       className={`rounded-xl border px-4 py-4 flex items-center gap-3 text-left ${
         active
           ? "border-blue-600 bg-blue-50 text-blue-600"

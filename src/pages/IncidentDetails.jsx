@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -34,10 +34,19 @@ import "leaflet/dist/leaflet.css";
 import { incidents } from "../data/incidents";
 import { dataEntries } from "../data/dataEntries";
 
+const incidentCoordinates = {
+  1: { latitude: 51.4899, longitude: 0.0698 },
+  2: { latitude: 51.4826, longitude: -0.0077 },
+  3: { latitude: 51.5072, longitude: -0.1276 },
+  4: { latitude: 51.5155, longitude: -0.141 },
+  5: { latitude: 51.5423, longitude: -0.0026 },
+};
+
 function badgeStyle(category) {
   if (category === "Awareness") return "bg-blue-50 text-blue-600";
   if (category === "Response") return "bg-green-50 text-green-600";
   if (category === "Damage") return "bg-orange-50 text-orange-600";
+  if (category === "Recovery") return "bg-purple-50 text-purple-600";
   return "bg-slate-100 text-slate-600";
 }
 
@@ -63,6 +72,7 @@ function markerColor(category) {
   if (category === "Awareness") return "#2563eb";
   if (category === "Response") return "#16a34a";
   if (category === "Damage") return "#f97316";
+  if (category === "Recovery") return "#9333ea";
   return "#64748b";
 }
 
@@ -104,26 +114,61 @@ function sourceIcon(source) {
 
 function IncidentDetails() {
   const { id } = useParams();
-
+  const navigate = useNavigate();
   const incident = incidents.find((item) => item.id === Number(id));
 
   const [activeTab, setActiveTab] = useState("Data");
   const [showAddDataModal, setShowAddDataModal] = useState(false);
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editedIncident, setEditedIncident] = useState(null);
+
+  const [allEntries, setAllEntries] = useState(() =>
+    dataEntries.map((entry) => ({
+      ...entry,
+      incidentId: 1,
+    })),
+  );
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
 
+  const incidentEntries = useMemo(() => {
+    if (!incident) return [];
+
+    return allEntries.filter((entry) => entry.incidentId === incident.id);
+  }, [allEntries, incident]);
+
   const sortedEvents = useMemo(() => {
-    return [...dataEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, []);
+    return [...incidentEntries].sort(
+      (a, b) => new Date(a.date) - new Date(b.date),
+    );
+  }, [incidentEntries]);
 
   const playbackEvents = useMemo(() => {
     if (selectedCategory === "All Categories") return sortedEvents;
+
     return sortedEvents.filter((event) => event.category === selectedCategory);
   }, [selectedCategory, sortedEvents]);
 
   const visibleEvents = playbackEvents.slice(0, currentIndex + 1);
+
+  const mostFrequentCategory = useMemo(() => {
+    if (incidentEntries.length === 0) return "None";
+
+    const counts = incidentEntries.reduce((acc, entry) => {
+      acc[entry.category] = (acc[entry.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  }, [incidentEntries]);
+
+  const firstReported = incidentEntries[0]?.date?.split(", ")[1] || "N/A";
+  const latestUpdate =
+    incidentEntries[incidentEntries.length - 1]?.date?.split(", ")[1] || "N/A";
 
   useEffect(() => {
     if (!isPlaying) return undefined;
@@ -147,7 +192,7 @@ function IncidentDetails() {
   useEffect(() => {
     setIsPlaying(false);
     setCurrentIndex(0);
-  }, [selectedCategory]);
+  }, [selectedCategory, id]);
 
   function handlePlay() {
     if (playbackEvents.length === 0) return;
@@ -161,6 +206,12 @@ function IncidentDetails() {
   function handleReset() {
     setIsPlaying(false);
     setCurrentIndex(0);
+  }
+
+  function handleAddDataEntry(newEntry) {
+    setAllEntries((currentEntries) => [...currentEntries, newEntry]);
+    setShowAddDataModal(false);
+    setActiveTab("Data");
   }
 
   if (!incident) {
@@ -227,7 +278,7 @@ function IncidentDetails() {
 
               <InfoBlock label="Total Data Entries">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <Database size={18} /> {incident.entries}
+                  <Database size={18} /> {incidentEntries.length}
                 </div>
               </InfoBlock>
             </div>
@@ -243,12 +294,21 @@ function IncidentDetails() {
             Add Data
           </button>
 
-          <button className="border border-blue-200 text-blue-600 px-5 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-50">
+          <button
+            onClick={() => {
+              setEditedIncident(incident);
+              setShowEditModal(true);
+            }}
+            className="border border-blue-200 text-blue-600 px-5 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-50"
+          >
             <Pencil size={18} />
             Edit Incident
           </button>
 
-          <button className="border border-red-200 text-red-600 px-5 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-red-50">
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="border border-red-200 text-red-600 px-5 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-red-50"
+          >
             <Trash2 size={18} />
             Delete Incident
           </button>
@@ -278,7 +338,7 @@ function IncidentDetails() {
             ))}
           </div>
 
-          {activeTab === "Data" && <DataTab />}
+          {activeTab === "Data" && <DataTab entries={incidentEntries} />}
 
           {activeTab === "Map" && (
             <MapTab
@@ -286,6 +346,7 @@ function IncidentDetails() {
               currentEvent={playbackEvents[currentIndex]}
               selectedCategory={selectedCategory}
               setSelectedCategory={setSelectedCategory}
+              incident={incident}
             />
           )}
 
@@ -314,8 +375,8 @@ function IncidentDetails() {
             bg="bg-purple-100"
             color="text-purple-600"
             title="Most Frequent Category"
-            main="Response"
-            sub="42%"
+            main={mostFrequentCategory}
+            sub={`${incidentEntries.length} total entries`}
           />
 
           <InsightCard
@@ -323,7 +384,7 @@ function IncidentDetails() {
             bg="bg-green-100"
             color="text-green-600"
             title="First Reported"
-            main="14:10"
+            main={firstReported}
             sub={incident.date}
           />
 
@@ -332,7 +393,7 @@ function IncidentDetails() {
             bg="bg-blue-100"
             color="text-blue-600"
             title="Latest Update"
-            main="16:45"
+            main={latestUpdate}
             sub={incident.date}
           />
 
@@ -341,8 +402,8 @@ function IncidentDetails() {
             bg="bg-orange-100"
             color="text-orange-600"
             title="Total Data Entries"
-            main={incident.entries}
-            sub="Across 5 Categories"
+            main={incidentEntries.length}
+            sub="Live count"
           />
         </aside>
       </div>
@@ -351,7 +412,125 @@ function IncidentDetails() {
         isOpen={showAddDataModal}
         onClose={() => setShowAddDataModal(false)}
         incident={incident}
+        onSave={handleAddDataEntry}
       />
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 p-7">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Edit Incident</h2>
+
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="h-10 w-10 rounded-xl hover:bg-slate-100 flex items-center justify-center"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <Field label="Incident Name">
+                <input
+                  value={editedIncident?.name || ""}
+                  onChange={(event) =>
+                    setEditedIncident({
+                      ...editedIncident,
+                      name: event.target.value,
+                    })
+                  }
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                />
+              </Field>
+
+              <Field label="Location">
+                <input
+                  value={editedIncident?.location || ""}
+                  onChange={(event) =>
+                    setEditedIncident({
+                      ...editedIncident,
+                      location: event.target.value,
+                    })
+                  }
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                />
+              </Field>
+
+              <Field label="Status">
+                <select
+                  value={editedIncident?.status || ""}
+                  onChange={(event) =>
+                    setEditedIncident({
+                      ...editedIncident,
+                      status: event.target.value,
+                    })
+                  }
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none"
+                >
+                  <option>Active</option>
+                  <option>Under Investigation</option>
+                  <option>Resolved</option>
+                </select>
+              </Field>
+
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2"
+              >
+                <Save size={18} />
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-7">
+            <div className="flex flex-col items-center text-center">
+              <div className="h-20 w-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-5">
+                <Trash2 size={38} />
+              </div>
+
+              <h2 className="text-2xl font-bold">Delete Incident?</h2>
+
+              <p className="text-slate-500 mt-3">
+                This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3 mt-7 w-full">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 border border-slate-200 rounded-xl py-3 font-semibold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => {
+                    const savedIncidents =
+                      JSON.parse(localStorage.getItem("incidents")) || [];
+
+                    const updatedIncidents = savedIncidents.filter(
+                      (item) => item.id !== incident.id,
+                    );
+
+                    localStorage.setItem(
+                      "incidents",
+                      JSON.stringify(updatedIncidents),
+                    );
+
+                    navigate("/incidents");
+                  }}
+                  className="flex-1 bg-red-600 text-white rounded-xl py-3 font-semibold hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -365,28 +544,64 @@ function InfoBlock({ label, children }) {
   );
 }
 
-function DataTab() {
+function DataTab({ entries }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All Categories");
+  const [sourceFilter, setSourceFilter] = useState("All Sources");
+
+  const filteredEntries = entries.filter((entry) => {
+    const searchMatch =
+      entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.source.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const categoryMatch =
+      categoryFilter === "All Categories" || entry.category === categoryFilter;
+
+    const sourceMatch =
+      sourceFilter === "All Sources" || entry.source === sourceFilter;
+
+    return searchMatch && categoryMatch && sourceMatch;
+  });
+
   return (
     <div className="p-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
         <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <Search size={20} className="text-slate-400" />
           <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
             className="outline-none w-full text-sm"
             placeholder="Search data entries..."
           />
         </div>
 
-        <select className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none">
+        <select
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
+          className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+        >
           <option>All Categories</option>
+          <option>Awareness</option>
+          <option>Response</option>
+          <option>Damage</option>
+          <option>Recovery</option>
+          <option>Other</option>
         </select>
 
-        <select className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none">
+        <select
+          value={sourceFilter}
+          onChange={(event) => setSourceFilter(event.target.value)}
+          className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+        >
           <option>All Sources</option>
-        </select>
-
-        <select className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none md:col-start-4">
-          <option>All Dates</option>
+          <option>Twitter</option>
+          <option>Official Report</option>
+          <option>News Outlet</option>
+          <option>Manual Entry</option>
+          <option>Interview Note</option>
+          <option>Other</option>
         </select>
       </div>
 
@@ -403,37 +618,54 @@ function DataTab() {
           </thead>
 
           <tbody>
-            {dataEntries.map((entry) => (
-              <tr key={entry.description} className="border-t border-slate-100">
-                <td className="px-5 py-4 font-medium">{entry.description}</td>
+            {filteredEntries.length > 0 ? (
+              filteredEntries.map((entry) => (
+                <tr
+                  key={`${entry.description}-${entry.date}`}
+                  className="border-t border-slate-100"
+                >
+                  <td className="px-5 py-4 font-medium">{entry.description}</td>
 
-                <td className="px-5 py-4">
-                  <span
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
-                      entry.category,
-                    )}`}
-                  >
-                    {entry.category}
-                  </span>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
+                        entry.category,
+                      )}`}
+                    >
+                      {entry.category}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-4 text-slate-600">
+                    <div className="flex items-center gap-2">
+                      {sourceIcon(entry.source)}
+                      {entry.source}
+                    </div>
+                  </td>
+
+                  <td className="px-5 py-4 text-slate-600">{entry.location}</td>
+
+                  <td className="px-5 py-4 text-slate-600">{entry.date}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan="5"
+                  className="px-5 py-8 text-center text-slate-500"
+                >
+                  No data entries match your filters.
                 </td>
-
-                <td className="px-5 py-4 text-slate-600">
-                  <div className="flex items-center gap-2">
-                    {sourceIcon(entry.source)}
-                    {entry.source}
-                  </div>
-                </td>
-
-                <td className="px-5 py-4 text-slate-600">{entry.location}</td>
-                <td className="px-5 py-4 text-slate-600">{entry.date}</td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
 
       <div className="flex items-center justify-between mt-5">
-        <p className="text-sm text-slate-500">Showing 1 to 7 of 7 entries</p>
+        <p className="text-sm text-slate-500">
+          Showing {filteredEntries.length} of {entries.length} entries
+        </p>
 
         <div className="flex items-center gap-2">
           <button className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400">
@@ -453,11 +685,16 @@ function DataTab() {
   );
 }
 
-function ResetMapButton() {
+function ResetMapButton({ incident }) {
   const map = useMap();
 
   function handleResetView() {
-    map.setView([51.4899, 0.0698], 14);
+    const coordinates = incidentCoordinates[incident.id] || {
+      latitude: 51.4899,
+      longitude: 0.0698,
+    };
+
+    map.setView([coordinates.latitude, coordinates.longitude], 14);
   }
 
   return (
@@ -491,8 +728,14 @@ function MapTab({
   currentEvent,
   selectedCategory,
   setSelectedCategory,
+  incident,
 }) {
-  const woolwichCenter = [51.4899, 0.0698];
+  const coordinates = incidentCoordinates[incident.id] || {
+    latitude: 51.4899,
+    longitude: 0.0698,
+  };
+
+  const mapCenter = [coordinates.latitude, coordinates.longitude];
 
   return (
     <div className="p-6">
@@ -511,12 +754,14 @@ function MapTab({
           <option>Awareness</option>
           <option>Response</option>
           <option>Damage</option>
+          <option>Recovery</option>
+          <option>Other</option>
         </select>
       </div>
 
       <div className="relative h-[520px] rounded-2xl border border-slate-200 overflow-hidden">
         <MapContainer
-          center={woolwichCenter}
+          center={mapCenter}
           zoom={14}
           scrollWheelZoom={true}
           className="h-full w-full z-0"
@@ -526,7 +771,7 @@ function MapTab({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <ResetMapButton />
+          <ResetMapButton incident={incident} />
           <FollowCurrentEvent currentEvent={currentEvent} />
 
           {visibleEvents.map((event, index) => {
@@ -554,7 +799,10 @@ function MapTab({
                     </p>
 
                     <p>
-                      <strong>Time:</strong> {event.date.split(", ")[1]}
+                      <strong>Time:</strong>{" "}
+                      {event.date.includes(", ")
+                        ? event.date.split(", ")[1]
+                        : event.date}
                     </p>
                   </div>
                 </Popup>
@@ -609,11 +857,13 @@ function TimelineTab({
             <option>Awareness</option>
             <option>Response</option>
             <option>Damage</option>
+            <option>Recovery</option>
+            <option>Other</option>
           </select>
 
           <button
             onClick={onPlay}
-            disabled={isPlaying}
+            disabled={isPlaying || visibleEvents.length === 0}
             className="bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Play size={18} />
@@ -640,53 +890,58 @@ function TimelineTab({
       </div>
 
       <div className="relative border-l-2 border-blue-100 ml-6 space-y-8">
-        {visibleEvents.map((event) => {
-          const isCurrentEvent =
-            currentEvent?.description === event.description;
+        {visibleEvents.length > 0 ? (
+          visibleEvents.map((event) => {
+            const isCurrentEvent =
+              currentEvent?.description === event.description;
 
-          return (
-            <div key={event.description} className="relative pl-8">
+            return (
               <div
-                className={`absolute -left-[11px] top-1 h-5 w-5 rounded-full ring-4 ${
-                  isCurrentEvent
-                    ? "bg-blue-600 ring-blue-100 animate-pulse"
-                    : "bg-slate-300 ring-slate-50"
-                }`}
-              />
-
-              <div
-                className={`bg-white border shadow-sm rounded-2xl p-5 transition ${
-                  isCurrentEvent
-                    ? "border-blue-200 ring-2 ring-blue-50"
-                    : "border-slate-100"
-                }`}
+                key={`${event.description}-${event.date}`}
+                className="relative pl-8"
               >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-blue-600">
-                    {event.date.split(", ")[1]}
-                  </h4>
+                <div
+                  className={`absolute -left-[11px] top-1 h-5 w-5 rounded-full ring-4 ${
+                    isCurrentEvent
+                      ? "bg-blue-600 ring-blue-100 animate-pulse"
+                      : "bg-slate-300 ring-slate-50"
+                  }`}
+                />
 
-                  <span
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
-                      event.category,
-                    )}`}
-                  >
-                    {event.category}
-                  </span>
+                <div
+                  className={`bg-white border shadow-sm rounded-2xl p-5 transition ${
+                    isCurrentEvent
+                      ? "border-blue-200 ring-2 ring-blue-50"
+                      : "border-slate-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-blue-600">
+                      {event.date.includes(", ")
+                        ? event.date.split(", ")[1]
+                        : event.date}
+                    </h4>
+
+                    <span
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
+                        event.category,
+                      )}`}
+                    >
+                      {event.category}
+                    </span>
+                  </div>
+
+                  <p className="text-slate-700 mt-2">{event.description}</p>
+
+                  <p className="text-sm text-slate-500 mt-2 flex items-center gap-2">
+                    <MapPin size={16} />
+                    {event.location}
+                  </p>
                 </div>
-
-                <p className="text-slate-700 mt-2">{event.description}</p>
-
-                <p className="text-sm text-slate-500 mt-2 flex items-center gap-2">
-                  <MapPin size={16} />
-                  {event.location}
-                </p>
               </div>
-            </div>
-          );
-        })}
-
-        {visibleEvents.length === 0 && (
+            );
+          })
+        ) : (
           <div className="relative pl-8">
             <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-5 text-slate-500">
               No events to display for this category.
@@ -698,8 +953,54 @@ function TimelineTab({
   );
 }
 
-function AddDataEntryModal({ isOpen, onClose, incident }) {
+function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
+  const coordinates = incidentCoordinates[incident.id] || {
+    latitude: 51.4899,
+    longitude: 0.0698,
+  };
+
+  const [formData, setFormData] = useState({
+    source: "Twitter",
+    description: "",
+    date: `${incident.date}, 14:25`,
+    location: incident.location,
+    category: "Awareness",
+    sourceUrl: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    setFormData({
+      source: "Twitter",
+      description: "",
+      date: `${incident.date}, 14:25`,
+      location: incident.location,
+      category: "Awareness",
+      sourceUrl: "",
+      notes: "",
+    });
+  }, [incident]);
+
   if (!isOpen) return null;
+
+  function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!formData.description.trim()) return;
+
+    onSave({
+      incidentId: incident.id,
+      description: formData.description,
+      category: formData.category,
+      source: formData.source,
+      location: formData.location,
+      date: formData.date,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      sourceUrl: formData.sourceUrl,
+      notes: formData.notes,
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
@@ -730,7 +1031,7 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
           </span>
         </div>
 
-        <form className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Incident">
               <input
@@ -741,7 +1042,13 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
             </Field>
 
             <Field label="Source / Platform">
-              <select className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+              <select
+                value={formData.source}
+                onChange={(event) =>
+                  setFormData({ ...formData, source: event.target.value })
+                }
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+              >
                 <option>Twitter</option>
                 <option>Official Report</option>
                 <option>News Outlet</option>
@@ -755,6 +1062,13 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
               <Field label="Description / Post Text">
                 <textarea
                   rows="5"
+                  value={formData.description}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      description: event.target.value,
+                    })
+                  }
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none resize-none focus:border-blue-500"
                   placeholder="Enter the incident-related post, report, or observation..."
                 />
@@ -763,20 +1077,32 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
 
             <Field label="Date & Time">
               <input
+                value={formData.date}
+                onChange={(event) =>
+                  setFormData({ ...formData, date: event.target.value })
+                }
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
-                defaultValue={incident.date}
               />
             </Field>
 
             <Field label="Location">
               <input
+                value={formData.location}
+                onChange={(event) =>
+                  setFormData({ ...formData, location: event.target.value })
+                }
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
-                defaultValue={incident.location}
               />
             </Field>
 
             <Field label="Category">
-              <select className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+              <select
+                value={formData.category}
+                onChange={(event) =>
+                  setFormData({ ...formData, category: event.target.value })
+                }
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
+              >
                 <option>Awareness</option>
                 <option>Response</option>
                 <option>Damage</option>
@@ -793,6 +1119,10 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
                 />
 
                 <input
+                  value={formData.sourceUrl}
+                  onChange={(event) =>
+                    setFormData({ ...formData, sourceUrl: event.target.value })
+                  }
                   className="w-full border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-blue-500"
                   placeholder="Paste original source link if available"
                 />
@@ -808,6 +1138,10 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
               <Field label="Notes (Optional)">
                 <textarea
                   rows="3"
+                  value={formData.notes}
+                  onChange={(event) =>
+                    setFormData({ ...formData, notes: event.target.value })
+                  }
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none resize-none focus:border-blue-500"
                   placeholder="Add any additional research notes..."
                 />
@@ -825,7 +1159,7 @@ function AddDataEntryModal({ isOpen, onClose, incident }) {
             </button>
 
             <button
-              type="button"
+              type="submit"
               className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2 hover:bg-blue-700 shadow-sm"
             >
               <Save size={18} />
@@ -861,7 +1195,9 @@ function InsightCard({ icon: Icon, bg, color, title, main, sub }) {
 
       <div>
         <p className="text-sm text-slate-600">{title}</p>
+
         <h4 className={`text-xl font-bold mt-1 ${color}`}>{main}</h4>
+
         <p className="text-sm text-slate-500 mt-1">{sub}</p>
       </div>
     </div>
