@@ -321,7 +321,7 @@ function Incidents() {
 
                     <td className="px-5 py-5">
                       <div className="flex items-center gap-4">
-                        <Link to={`/incidents/${index + 1}`}>
+                        <Link to={`/incidents/${incident.id}`}>
                           <Eye
                             size={18}
                             className="text-blue-600 cursor-pointer"

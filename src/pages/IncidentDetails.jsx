@@ -1,5 +1,4 @@
 import {
-  Flame,
   MapPin,
   Calendar,
   Database,
@@ -27,10 +26,12 @@ import {
 } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+import { incidents } from "../data/incidents";
 import { dataEntries } from "../data/dataEntries";
 
 function badgeStyle(category) {
@@ -38,6 +39,24 @@ function badgeStyle(category) {
   if (category === "Response") return "bg-green-50 text-green-600";
   if (category === "Damage") return "bg-orange-50 text-orange-600";
   return "bg-slate-100 text-slate-600";
+}
+
+function getCategoryStyle(color) {
+  const styles = {
+    red: "bg-red-50 text-red-500",
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-green-50 text-green-600",
+    purple: "bg-purple-50 text-purple-600",
+    orange: "bg-orange-50 text-orange-600",
+  };
+
+  return styles[color] || "bg-slate-100 text-slate-600";
+}
+
+function getStatusStyle(status) {
+  if (status === "Active") return "bg-blue-50 text-blue-600";
+  if (status === "Under Investigation") return "bg-orange-50 text-orange-600";
+  return "bg-green-50 text-green-600";
 }
 
 function markerColor(category) {
@@ -84,6 +103,10 @@ function sourceIcon(source) {
 }
 
 function IncidentDetails() {
+  const { id } = useParams();
+
+  const incident = incidents.find((item) => item.id === Number(id));
+
   const [activeTab, setActiveTab] = useState("Data");
   const [showAddDataModal, setShowAddDataModal] = useState(false);
 
@@ -140,44 +163,71 @@ function IncidentDetails() {
     setCurrentIndex(0);
   }
 
+  if (!incident) {
+    return (
+      <section className="p-8">
+        <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-8">
+          <h1 className="text-3xl font-bold">Incident Not Found</h1>
+          <p className="text-slate-500 mt-2">
+            The incident you are looking for does not exist.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const IncidentIcon = incident.icon;
+
   return (
     <section className="p-8 space-y-6">
       <div className="bg-white border border-slate-100 shadow-sm rounded-2xl p-6 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
         <div className="flex gap-6">
-          <div className="h-20 w-20 rounded-2xl bg-red-50 flex items-center justify-center">
-            <Flame size={42} className="text-red-500" />
+          <div
+            className={`h-20 w-20 rounded-2xl ${getCategoryStyle(
+              incident.color,
+            )} flex items-center justify-center`}
+          >
+            <IncidentIcon size={42} />
           </div>
 
           <div>
-            <h1 className="text-3xl font-bold">London Fire Incident</h1>
+            <h1 className="text-3xl font-bold">{incident.name}</h1>
 
             <div className="flex items-center gap-2 text-slate-500 mt-2">
               <MapPin size={19} />
-              <span>Woolwich, London</span>
+              <span>{incident.location}</span>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-5">
               <InfoBlock label="Category">
-                <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-sm font-semibold">
-                  Fire Emergency
+                <span
+                  className={`${getCategoryStyle(
+                    incident.color,
+                  )} px-3 py-1 rounded-lg text-sm font-semibold`}
+                >
+                  {incident.category}
                 </span>
               </InfoBlock>
 
               <InfoBlock label="Status">
-                <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm font-semibold">
-                  Active
+                <span
+                  className={`${getStatusStyle(
+                    incident.status,
+                  )} px-3 py-1 rounded-lg text-sm font-semibold`}
+                >
+                  {incident.status}
                 </span>
               </InfoBlock>
 
               <InfoBlock label="Date Reported">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <Calendar size={18} /> 08 Jan 2026
+                  <Calendar size={18} /> {incident.date}
                 </div>
               </InfoBlock>
 
               <InfoBlock label="Total Data Entries">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <Database size={18} /> 342
+                  <Database size={18} /> {incident.entries}
                 </div>
               </InfoBlock>
             </div>
@@ -274,7 +324,7 @@ function IncidentDetails() {
             color="text-green-600"
             title="First Reported"
             main="14:10"
-            sub="08 Jan 2026"
+            sub={incident.date}
           />
 
           <InsightCard
@@ -283,7 +333,7 @@ function IncidentDetails() {
             color="text-blue-600"
             title="Latest Update"
             main="16:45"
-            sub="08 Jan 2026"
+            sub={incident.date}
           />
 
           <InsightCard
@@ -291,7 +341,7 @@ function IncidentDetails() {
             bg="bg-orange-100"
             color="text-orange-600"
             title="Total Data Entries"
-            main="342"
+            main={incident.entries}
             sub="Across 5 Categories"
           />
         </aside>
@@ -300,6 +350,7 @@ function IncidentDetails() {
       <AddDataEntryModal
         isOpen={showAddDataModal}
         onClose={() => setShowAddDataModal(false)}
+        incident={incident}
       />
     </section>
   );
@@ -647,7 +698,7 @@ function TimelineTab({
   );
 }
 
-function AddDataEntryModal({ isOpen, onClose }) {
+function AddDataEntryModal({ isOpen, onClose, incident }) {
   if (!isOpen) return null;
 
   return (
@@ -684,7 +735,7 @@ function AddDataEntryModal({ isOpen, onClose }) {
             <Field label="Incident">
               <input
                 readOnly
-                value="London Fire Incident"
+                value={incident.name}
                 className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-sm outline-none text-slate-700"
               />
             </Field>
@@ -713,14 +764,14 @@ function AddDataEntryModal({ isOpen, onClose }) {
             <Field label="Date & Time">
               <input
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
-                defaultValue="08 Jan 2026, 14:25"
+                defaultValue={incident.date}
               />
             </Field>
 
             <Field label="Location">
               <input
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
-                placeholder="e.g. Woolwich Station, London"
+                defaultValue={incident.location}
               />
             </Field>
 
