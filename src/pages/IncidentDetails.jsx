@@ -23,6 +23,10 @@ import {
   Pause,
   RotateCcw,
   Search,
+  Paperclip,
+  Image as ImageIcon,
+  Video,
+  File,
 } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
@@ -128,6 +132,7 @@ function IncidentDetails() {
     dataEntries.map((entry) => ({
       ...entry,
       incidentId: 1,
+      attachments: entry.attachments || [],
     })),
   );
 
@@ -544,6 +549,41 @@ function InfoBlock({ label, children }) {
   );
 }
 
+function AttachmentPreview({ attachments = [] }) {
+  if (!attachments.length) {
+    return <span className="text-slate-400 text-sm">No files</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {attachments.map((file) => {
+        const isImage = file.type.startsWith("image/");
+        const isVideo = file.type.startsWith("video/");
+
+        return (
+          <a
+            key={file.id}
+            href={file.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
+          >
+            {isImage ? (
+              <ImageIcon size={15} className="text-blue-600" />
+            ) : isVideo ? (
+              <Video size={15} className="text-purple-600" />
+            ) : (
+              <File size={15} className="text-slate-600" />
+            )}
+
+            <span className="max-w-[120px] truncate">{file.name}</span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 function DataTab({ entries }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
@@ -614,6 +654,7 @@ function DataTab({ entries }) {
               <th className="text-left px-5 py-4">Source</th>
               <th className="text-left px-5 py-4">Location</th>
               <th className="text-left px-5 py-4">Date & Time</th>
+              <th className="text-left px-5 py-4">Evidence</th>
             </tr>
           </thead>
 
@@ -646,12 +687,15 @@ function DataTab({ entries }) {
                   <td className="px-5 py-4 text-slate-600">{entry.location}</td>
 
                   <td className="px-5 py-4 text-slate-600">{entry.date}</td>
+                  <td className="px-5 py-4">
+                    <AttachmentPreview attachments={entry.attachments} />
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td
-                  colSpan="5"
+                  colSpan="6"
                   className="px-5 py-8 text-center text-slate-500"
                 >
                   No data entries match your filters.
@@ -968,6 +1012,7 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
     sourceUrl: "",
     notes: "",
   });
+  const [attachments, setAttachments] = useState([]);
 
   useEffect(() => {
     setFormData({
@@ -979,9 +1024,29 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
       sourceUrl: "",
       notes: "",
     });
+
+    setAttachments([]);
   }, [incident]);
 
   if (!isOpen) return null;
+
+  function handleFileChange(event) {
+    const selectedFiles = Array.from(event.target.files).map((file) => ({
+      id: `${file.name}-${Date.now()}-${Math.random()}`,
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      url: URL.createObjectURL(file),
+    }));
+
+    setAttachments((currentFiles) => [...currentFiles, ...selectedFiles]);
+  }
+
+  function removeAttachment(fileId) {
+    setAttachments((currentFiles) =>
+      currentFiles.filter((file) => file.id !== fileId),
+    );
+  }
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -999,6 +1064,7 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
       longitude: coordinates.longitude,
       sourceUrl: formData.sourceUrl,
       notes: formData.notes,
+      attachments,
     });
   }
 
@@ -1135,6 +1201,73 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
             </Field>
 
             <div className="md:col-span-2">
+              <div className="md:col-span-2">
+                <Field label="Evidence Files">
+                  <div className="border-2 border-dashed border-slate-200 rounded-2xl p-5">
+                    <label className="flex flex-col items-center justify-center cursor-pointer text-center">
+                      <Paperclip size={28} className="text-blue-600 mb-2" />
+
+                      <span className="font-semibold text-slate-700">
+                        Upload documents, photos, or videos
+                      </span>
+
+                      <span className="text-sm text-slate-500 mt-1">
+                        Supports images, videos, PDFs, and documents
+                      </span>
+
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,video/*,.pdf,.doc,.docx"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {attachments.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                      {attachments.map((file) => (
+                        <div
+                          key={file.id}
+                          className="border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {file.type.startsWith("image/") ? (
+                              <ImageIcon
+                                size={20}
+                                className="text-blue-600 shrink-0"
+                              />
+                            ) : file.type.startsWith("video/") ? (
+                              <Video
+                                size={20}
+                                className="text-purple-600 shrink-0"
+                              />
+                            ) : (
+                              <File
+                                size={20}
+                                className="text-slate-600 shrink-0"
+                              />
+                            )}
+
+                            <span className="text-sm text-slate-600 truncate">
+                              {file.name}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(file.id)}
+                            className="text-red-500 hover:text-red-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Field>
+              </div>
               <Field label="Notes (Optional)">
                 <textarea
                   rows="3"
