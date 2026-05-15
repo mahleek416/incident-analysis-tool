@@ -123,18 +123,28 @@ function IncidentDetails() {
 
   const [activeTab, setActiveTab] = useState("Data");
   const [showAddDataModal, setShowAddDataModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editedIncident, setEditedIncident] = useState(null);
 
-  const [allEntries, setAllEntries] = useState(() =>
-    dataEntries.map((entry) => ({
+  const [allEntries, setAllEntries] = useState(() => {
+    const savedEntries = localStorage.getItem("incidentEntries");
+
+    const loadedEntries = savedEntries
+      ? JSON.parse(savedEntries)
+      : dataEntries.map((entry) => ({
+          ...entry,
+          incidentId: 1,
+        }));
+
+    return loadedEntries.map((entry, index) => ({
       ...entry,
-      incidentId: 1,
+      id: entry.id || `entry-${entry.incidentId || 1}-${index}`,
       attachments: entry.attachments || [],
-    })),
-  );
+    }));
+  });
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -198,6 +208,9 @@ function IncidentDetails() {
     setIsPlaying(false);
     setCurrentIndex(0);
   }, [selectedCategory, id]);
+  useEffect(() => {
+    localStorage.setItem("incidentEntries", JSON.stringify(allEntries));
+  }, [allEntries]);
 
   function handlePlay() {
     if (playbackEvents.length === 0) return;
@@ -214,9 +227,21 @@ function IncidentDetails() {
   }
 
   function handleAddDataEntry(newEntry) {
-    setAllEntries((currentEntries) => [...currentEntries, newEntry]);
+    const entryWithId = {
+      ...newEntry,
+      id: `entry-${Date.now()}-${Math.random()}`,
+    };
+
+    setAllEntries((currentEntries) => [...currentEntries, entryWithId]);
     setShowAddDataModal(false);
     setActiveTab("Data");
+  }
+  function handleUpdateDataEntry(updatedEntry) {
+    setAllEntries((currentEntries) =>
+      currentEntries.map((entry) =>
+        entry.id === updatedEntry.id ? updatedEntry : entry,
+      ),
+    );
   }
 
   if (!incident) {
@@ -343,7 +368,9 @@ function IncidentDetails() {
             ))}
           </div>
 
-          {activeTab === "Data" && <DataTab entries={incidentEntries} />}
+          {activeTab === "Data" && (
+            <DataTab entries={incidentEntries} onEditEntry={setEditingEntry} />
+          )}
 
           {activeTab === "Map" && (
             <MapTab
@@ -414,10 +441,21 @@ function IncidentDetails() {
       </div>
 
       <AddDataEntryModal
-        isOpen={showAddDataModal}
-        onClose={() => setShowAddDataModal(false)}
+        isOpen={showAddDataModal || !!editingEntry}
+        onClose={() => {
+          setShowAddDataModal(false);
+          setEditingEntry(null);
+        }}
         incident={incident}
-        onSave={handleAddDataEntry}
+        editingEntry={editingEntry}
+        onSave={(entry) => {
+          if (editingEntry) {
+            handleUpdateDataEntry(entry);
+            setEditingEntry(null);
+          } else {
+            handleAddDataEntry(entry);
+          }
+        }}
       />
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
@@ -550,41 +588,114 @@ function InfoBlock({ label, children }) {
 }
 
 function AttachmentPreview({ attachments = [] }) {
+  const [selectedFile, setSelectedFile] = useState(null);
+
   if (!attachments.length) {
     return <span className="text-slate-400 text-sm">No files</span>;
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {attachments.map((file) => {
-        const isImage = file.type.startsWith("image/");
-        const isVideo = file.type.startsWith("video/");
+    <>
+      <div className="flex flex-wrap gap-3">
+        {attachments.map((file) => {
+          const isImage = file.type.startsWith("image/");
+          const isVideo = file.type.startsWith("video/");
 
-        return (
-          <a
-            key={file.id}
-            href={file.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
-          >
-            {isImage ? (
-              <ImageIcon size={15} className="text-blue-600" />
-            ) : isVideo ? (
-              <Video size={15} className="text-purple-600" />
-            ) : (
-              <File size={15} className="text-slate-600" />
-            )}
+          return (
+            <button
+              key={file.id}
+              type="button"
+              onClick={() => setSelectedFile(file)}
+              className="group border border-slate-200 rounded-xl overflow-hidden bg-white hover:shadow-sm transition w-32 text-left"
+            >
+              <div className="h-20 bg-slate-50 flex items-center justify-center">
+                {isImage ? (
+                  <img
+                    src={file.url}
+                    alt={file.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : isVideo ? (
+                  <div className="flex flex-col items-center text-purple-600">
+                    <Video size={26} />
+                    <span className="text-[10px] mt-1">Video</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-slate-600">
+                    <File size={26} />
+                    <span className="text-[10px] mt-1">Document</span>
+                  </div>
+                )}
+              </div>
 
-            <span className="max-w-[120px] truncate">{file.name}</span>
-          </a>
-        );
-      })}
-    </div>
+              <div className="px-2 py-2">
+                <p className="text-xs font-medium text-slate-700 truncate">
+                  {file.name}
+                </p>
+
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {isImage ? "Image" : isVideo ? "Video" : "File"}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedFile && (
+        <div className="fixed inset-0 z-[999] bg-black/80 flex items-center justify-center p-6">
+          <div className="relative max-w-5xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+            <button
+              onClick={() => setSelectedFile(null)}
+              className="absolute top-4 right-4 z-10 bg-white border border-slate-200 h-10 w-10 rounded-full flex items-center justify-center hover:bg-slate-100"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="bg-slate-100 flex items-center justify-center max-h-[85vh] overflow-auto">
+              {selectedFile.type.startsWith("image/") ? (
+                <img
+                  src={selectedFile.url}
+                  alt={selectedFile.name}
+                  className="max-h-[85vh] w-auto object-contain"
+                />
+              ) : selectedFile.type.startsWith("video/") ? (
+                <video
+                  key={selectedFile.id}
+                  controls
+                  preload="metadata"
+                  className="max-h-[85vh] w-full bg-black"
+                  src={selectedFile.url}
+                >
+                  Your browser does not support this video.
+                </video>
+              ) : (
+                <div className="p-12 text-center">
+                  <File size={60} className="mx-auto text-slate-500 mb-4" />
+
+                  <p className="font-semibold text-slate-700">
+                    {selectedFile.name}
+                  </p>
+
+                  <a
+                    href={selectedFile.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block mt-4 text-blue-600 font-medium hover:underline"
+                  >
+                    Open File
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
-function DataTab({ entries }) {
+function DataTab({ entries, onEditEntry }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [sourceFilter, setSourceFilter] = useState("All Sources");
@@ -655,6 +766,7 @@ function DataTab({ entries }) {
               <th className="text-left px-5 py-4">Location</th>
               <th className="text-left px-5 py-4">Date & Time</th>
               <th className="text-left px-5 py-4">Evidence</th>
+              <th className="text-left px-5 py-4">Actions</th>
             </tr>
           </thead>
 
@@ -690,12 +802,20 @@ function DataTab({ entries }) {
                   <td className="px-5 py-4">
                     <AttachmentPreview attachments={entry.attachments} />
                   </td>
+                  <td className="px-5 py-4">
+                    <button
+                      onClick={() => onEditEntry(entry)}
+                      className="h-9 w-9 rounded-lg border border-blue-100 flex items-center justify-center text-blue-600 hover:bg-blue-50"
+                    >
+                      <Pencil size={17} />
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td
-                  colSpan="6"
+                  colSpan="7"
                   className="px-5 py-8 text-center text-slate-500"
                 >
                   No data entries match your filters.
@@ -932,7 +1052,64 @@ function TimelineTab({
           </button>
         </div>
       </div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between text-sm text-slate-500 mb-2">
+          <span>
+            Event {currentIndex + 1} of {visibleEvents.length}
+          </span>
 
+          <span>{currentEvent?.date || "No active event"}</span>
+        </div>
+
+        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-600 transition-all duration-500"
+            style={{
+              width: `${
+                visibleEvents.length === 0
+                  ? 0
+                  : (visibleEvents.length / Math.max(visibleEvents.length, 1)) *
+                    100
+              }%`,
+            }}
+          />
+        </div>
+      </div>
+      {currentEvent && (
+        <div className="mb-6 bg-blue-50 border border-blue-100 rounded-2xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
+                Current Active Event
+              </p>
+
+              <h4 className="text-lg font-bold text-slate-900 mt-1">
+                {currentEvent.description}
+              </h4>
+            </div>
+
+            <span
+              className={`px-3 py-1 rounded-lg text-xs font-semibold ${badgeStyle(
+                currentEvent.category,
+              )}`}
+            >
+              {currentEvent.category}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-5 mt-4 text-sm text-slate-600">
+            <div className="flex items-center gap-2">
+              <Clock size={16} />
+              {currentEvent.date}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <MapPin size={16} />
+              {currentEvent.location}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="relative border-l-2 border-blue-100 ml-6 space-y-8">
         {visibleEvents.length > 0 ? (
           visibleEvents.map((event) => {
@@ -981,6 +1158,15 @@ function TimelineTab({
                     <MapPin size={16} />
                     {event.location}
                   </p>
+                  {event.attachments?.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold text-slate-500 mb-2">
+                        Evidence
+                      </p>
+
+                      <AttachmentPreview attachments={event.attachments} />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -997,12 +1183,17 @@ function TimelineTab({
   );
 }
 
-function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
+function AddDataEntryModal({
+  isOpen,
+  onClose,
+  incident,
+  onSave,
+  editingEntry,
+}) {
   const coordinates = incidentCoordinates[incident.id] || {
     latitude: 51.4899,
     longitude: 0.0698,
   };
-
   const [formData, setFormData] = useState({
     source: "Twitter",
     description: "",
@@ -1015,31 +1206,55 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
   const [attachments, setAttachments] = useState([]);
 
   useEffect(() => {
-    setFormData({
-      source: "Twitter",
-      description: "",
-      date: `${incident.date}, 14:25`,
-      location: incident.location,
-      category: "Awareness",
-      sourceUrl: "",
-      notes: "",
-    });
+    if (editingEntry) {
+      setFormData({
+        source: editingEntry.source || "Twitter",
+        description: editingEntry.description || "",
+        date: editingEntry.date || "",
+        location: editingEntry.location || incident.location,
+        category: editingEntry.category || "Awareness",
+        sourceUrl: editingEntry.sourceUrl || "",
+        notes: editingEntry.notes || "",
+      });
 
-    setAttachments([]);
-  }, [incident]);
+      setAttachments(editingEntry.attachments || []);
+    } else {
+      setFormData({
+        source: "Twitter",
+        description: "",
+        date: `${incident.date}, 14:25`,
+        location: incident.location,
+        category: "Awareness",
+        sourceUrl: "",
+        notes: "",
+      });
+
+      setAttachments([]);
+    }
+  }, [incident, editingEntry]);
 
   if (!isOpen) return null;
 
   function handleFileChange(event) {
-    const selectedFiles = Array.from(event.target.files).map((file) => ({
-      id: `${file.name}-${Date.now()}-${Math.random()}`,
-      name: file.name,
-      type: file.type || "application/octet-stream",
-      size: file.size,
-      url: URL.createObjectURL(file),
-    }));
+    const files = Array.from(event.target.files);
 
-    setAttachments((currentFiles) => [...currentFiles, ...selectedFiles]);
+    files.forEach((file) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const newFile = {
+          id: `${file.name}-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          url: reader.result,
+        };
+
+        setAttachments((currentFiles) => [...currentFiles, newFile]);
+      };
+
+      reader.readAsDataURL(file);
+    });
   }
 
   function removeAttachment(fileId) {
@@ -1054,6 +1269,7 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
     if (!formData.description.trim()) return;
 
     onSave({
+      id: editingEntry?.id || `entry-${Date.now()}-${Math.random()}`,
       incidentId: incident.id,
       description: formData.description,
       category: formData.category,
@@ -1066,6 +1282,8 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
       notes: formData.notes,
       attachments,
     });
+
+    onClose();
   }
 
   return (
@@ -1292,7 +1510,8 @@ function AddDataEntryModal({ isOpen, onClose, incident, onSave }) {
             </button>
 
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2 hover:bg-blue-700 shadow-sm"
             >
               <Save size={18} />
