@@ -31,7 +31,15 @@ import {
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Popup,
+  Tooltip,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -379,6 +387,12 @@ function IncidentDetails() {
               selectedCategory={selectedCategory}
               setSelectedCategory={setSelectedCategory}
               incident={incident}
+              isPlaying={isPlaying}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onReset={handleReset}
+              currentIndex={currentIndex}
+              totalEvents={playbackEvents.length}
             />
           )}
 
@@ -886,13 +900,47 @@ function FollowCurrentEvent({ currentEvent }) {
 
   return null;
 }
+function LocationPickerMarker({ position }) {
+  if (!position) return null;
 
+  return (
+    <Marker position={[position.latitude, position.longitude]}>
+      <Popup>
+        <div>
+          <strong>Selected location</strong>
+          <br />
+          {position.latitude.toFixed(5)}, {position.longitude.toFixed(5)}
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+function LocationMapController({ position }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!position) return;
+
+    map.flyTo([position.latitude, position.longitude], 13, {
+      animate: true,
+      duration: 0.8,
+    });
+  }, [position, map]);
+
+  return null;
+}
 function MapTab({
   visibleEvents,
   currentEvent,
   selectedCategory,
   setSelectedCategory,
   incident,
+  isPlaying,
+  onPlay,
+  onPause,
+  onReset,
+  currentIndex,
+  totalEvents,
 }) {
   const coordinates = incidentCoordinates[incident.id] || {
     latitude: 51.4899,
@@ -903,24 +951,58 @@ function MapTab({
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-4 gap-4">
-        <p className="text-sm text-slate-500">
-          Showing {visibleEvents.length} event marker
-          {visibleEvents.length === 1 ? "" : "s"} from timeline playback
-        </p>
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-4">
+        <div>
+          <p className="text-sm text-slate-500">
+            Showing {visibleEvents.length} event marker
+            {visibleEvents.length === 1 ? "" : "s"} from timeline playback
+          </p>
 
-        <select
-          value={selectedCategory}
-          onChange={(event) => setSelectedCategory(event.target.value)}
-          className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none bg-white"
-        >
-          <option>All Categories</option>
-          <option>Awareness</option>
-          <option>Response</option>
-          <option>Damage</option>
-          <option>Recovery</option>
-          <option>Other</option>
-        </select>
+          <p className="text-xs text-slate-400 mt-1">
+            Event {totalEvents === 0 ? 0 : currentIndex + 1} of {totalEvents}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={selectedCategory}
+            onChange={(event) => setSelectedCategory(event.target.value)}
+            className="border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none bg-white"
+          >
+            <option>All Categories</option>
+            <option>Awareness</option>
+            <option>Response</option>
+            <option>Damage</option>
+            <option>Recovery</option>
+            <option>Other</option>
+          </select>
+
+          <button
+            onClick={onPlay}
+            disabled={isPlaying || totalEvents === 0}
+            className="bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play size={18} />
+            Play
+          </button>
+
+          <button
+            onClick={onPause}
+            disabled={!isPlaying}
+            className="border border-slate-200 text-slate-700 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Pause size={18} />
+            Pause
+          </button>
+
+          <button
+            onClick={onReset}
+            className="border border-slate-200 text-slate-700 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50"
+          >
+            <RotateCcw size={18} />
+            Reset
+          </button>
+        </div>
       </div>
 
       <div className="relative h-[520px] rounded-2xl border border-slate-200 overflow-hidden">
@@ -948,6 +1030,16 @@ function MapTab({
                 position={[event.latitude, event.longitude]}
                 icon={createMarkerIcon(event.category, isCurrentEvent)}
               >
+                {isCurrentEvent && isPlaying && (
+                  <Tooltip permanent direction="top" offset={[0, -16]}>
+                    <div>
+                      <strong>{event.category}</strong>
+                      <br />
+                      {event.description}
+                    </div>
+                  </Tooltip>
+                )}
+
                 <Popup>
                   <div className="space-y-1">
                     <h4 className="font-bold text-slate-900">
@@ -1204,6 +1296,11 @@ function AddDataEntryModal({
     notes: "",
   });
   const [attachments, setAttachments] = useState([]);
+  const [selectedPosition, setSelectedPosition] = useState({
+    latitude: incidentCoordinates[incident.id]?.latitude || 51.4899,
+    longitude: incidentCoordinates[incident.id]?.longitude || 0.0698,
+  });
+  const [locationSearch, setLocationSearch] = useState("");
 
   useEffect(() => {
     if (editingEntry) {
@@ -1218,6 +1315,16 @@ function AddDataEntryModal({
       });
 
       setAttachments(editingEntry.attachments || []);
+      setSelectedPosition({
+        latitude:
+          editingEntry.latitude ||
+          incidentCoordinates[incident.id]?.latitude ||
+          51.4899,
+        longitude:
+          editingEntry.longitude ||
+          incidentCoordinates[incident.id]?.longitude ||
+          0.0698,
+      });
     } else {
       setFormData({
         source: "Twitter",
@@ -1230,6 +1337,10 @@ function AddDataEntryModal({
       });
 
       setAttachments([]);
+      setSelectedPosition({
+        latitude: incidentCoordinates[incident.id]?.latitude || 51.4899,
+        longitude: incidentCoordinates[incident.id]?.longitude || 0.0698,
+      });
     }
   }, [incident, editingEntry]);
 
@@ -1261,6 +1372,31 @@ function AddDataEntryModal({
     setAttachments((currentFiles) =>
       currentFiles.filter((file) => file.id !== fileId),
     );
+  }
+  async function handleLocationSearch() {
+    if (!locationSearch.trim()) return;
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        locationSearch,
+      )}`,
+    );
+
+    const results = await response.json();
+
+    if (!results.length) return;
+
+    const place = results[0];
+
+    const latitude = Number(place.lat);
+    const longitude = Number(place.lon);
+
+    setSelectedPosition({ latitude, longitude });
+
+    setFormData({
+      ...formData,
+      location: place.display_name,
+    });
   }
 
   function handleSubmit(event) {
@@ -1378,6 +1514,60 @@ function AddDataEntryModal({
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500"
               />
             </Field>
+            <div className="md:col-span-2">
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={locationSearch}
+                  onChange={(event) => setLocationSearch(event.target.value)}
+                  placeholder="Search for a location..."
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleLocationSearch}
+                  className="px-4 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold"
+                >
+                  Search
+                </button>
+              </div>
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <MapContainer
+                  center={[
+                    selectedPosition.latitude,
+                    selectedPosition.longitude,
+                  ]}
+                  zoom={13}
+                  className="h-[300px] w-full"
+                >
+                  <TileLayer
+                    attribution="&copy; OpenStreetMap contributors"
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LocationMapController position={selectedPosition} />
+                  <LocationPickerMarker position={selectedPosition} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPosition({
+                        latitude:
+                          incidentCoordinates[incident.id]?.latitude || 51.4899,
+                        longitude:
+                          incidentCoordinates[incident.id]?.longitude || 0.0698,
+                      });
+                    }}
+                    className="absolute top-3 right-3 z-[1000] bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold shadow-md"
+                  >
+                    Reset View
+                  </button>
+                </MapContainer>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-2">
+                Click on the map to choose the exact incident location.
+              </p>
+            </div>
 
             <Field label="Category">
               <select
