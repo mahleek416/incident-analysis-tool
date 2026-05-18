@@ -285,6 +285,23 @@ function Incidents() {
               ))}
             </select>
           </div>
+          <div className="flex justify-between items-center mb-5">
+            <p className="text-sm text-slate-500">
+              Showing {filteredIncidents.length} of {incidentList.length}{" "}
+              incidents
+            </p>
+
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("All Statuses");
+                setCategoryFilter("All Categories");
+              }}
+              className="text-sm text-blue-600 font-semibold hover:underline"
+            >
+              Reset Filters
+            </button>
+          </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm">
